@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🎵 音感トレーニング v2</title>
+<style>
+  :root { --primary:#007aff; --ok:#34c759; --ng:#ff3b30; --warn:#ff9500; --bg:#f5f5f7; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+         max-width: 640px; margin: 0 auto; padding: 12px; background: var(--bg); color:#1c1c1e; }
+  h1 { font-size: 20px; margin: 8px 0 12px; }
+  .card { background: white; border-radius: 14px; padding: 14px; margin-bottom: 10px;
+          box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  button { font-size: 15px; padding: 12px 16px; border-radius: 10px; border: none;
+           background: var(--primary); color: white; margin: 4px; cursor: pointer; min-width: 90px; }
+  button:active { opacity: 0.7; }
+  button.secondary { background: #e5e5ea; color: #1c1c1e; }
+  button.recording { background: var(--ng); }
+  button.warn { background: var(--warn); }
+  .mode-tabs button { background: #e5e5ea; color: #1c1c1e; min-width: 0; flex:1; font-size:12px; padding:10px 2px; }
+  .mode-tabs button.active { background: var(--primary); color: white; }
+  .mode-tabs { display: flex; gap: 4px; }
+  .note-display { font-size: 40px; text-align: center; margin: 14px 0; font-weight: bold;
+                  min-height: 56px; letter-spacing: 4px; }
+  .pitch-meter { font-size: 13px; color: #666; text-align: center; margin-top: 4px; }
+  .pitch-live { font-size: 22px; font-weight: bold; color: var(--primary); }
+  .controls { display: flex; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+  .score { font-size: 16px; text-align: right; color: #666; margin-top: 8px; }
+  .result-correct { color: var(--ok); font-weight: bold; }
+  .result-wrong { color: var(--ng); font-weight: bold; }
+  canvas { width: 100%; height: 70px; background: #fafafa; border-radius: 8px; display:block; }
+  details { font-size: 14px; }
+  details label { display: block; margin: 8px 0; }
+  input[type=range] { width: 60%; vertical-align: middle; }
+  .small { font-size: 12px; color: #888; }
+  .instr { font-size: 14px; color: #444; text-align: center; min-height: 20px; }
+  .hidden { display: none !important; }
+  /* Mic test specific */
+  .vol-bar-wrap { width:100%; height:24px; background:#eee; border-radius:6px; overflow:hidden; margin:8px 0; }
+  .vol-bar { height:100%; width:0%; background:linear-gradient(90deg, #34c759 0%, #ff9500 70%, #ff3b30 90%); transition:width 0.05s; }
+  .stat-row { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #f0f0f0; font-size:13px; }
+  .stat-label { color:#666; }
+  .stat-val { font-family:monospace; font-weight:bold; color:#1c1c1e; }
+  .stat-val.ok { color:var(--ok); }
+  .stat-val.ng { color:var(--ng); }
+  #log { font-family:monospace; font-size:11px; background:#1c1c1e; color:#0f0; padding:8px;
+         border-radius:6px; max-height:140px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; }
+</style>
+</head>
+<body>
+<h1>🎵 音感トレーニング v2</h1>
+
+<div class="card mode-tabs">
+  <button id="modeA" class="active">A. メロディ復唱</button>
+  <button id="modeB">B. 音当て</button>
+  <button id="modeC">C. 楽譜再現</button>
+  <button id="modeT" class="warn">🔧 マイクテスト</button>
+</div>
+
+<!-- ===== 通常モード ===== -->
+<div id="trainView">
+  <div class="card">
+    <div class="instr" id="instruction">スタートを押してください</div>
+    <div class="note-display" id="display">—</div>
+    <canvas id="viz" width="640" height="70"></canvas>
+    <div class="pitch-meter">
+      リアルタイム音程: <span class="pitch-live" id="pitchLive">―</span>
+      <span id="pitchHz" class="small"></span>
+    </div>
+    <div class="controls">
+      <button id="play">▶ お手本再生</button>
+      <button id="record">🎤 鼻歌で答える</button>
+      <button id="next" class="secondary">次の問題 →</button>
+    </div>
+    <div class="score" id="score">スコア: 0 / 0</div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>⚙️ 設定</summary>
+      <label>難易度（音域）:
+        <select id="difficulty">
+          <option value="easy">易（ドレミファソ / 5音）</option>
+          <option value="normal" selected>中（Cメジャー1オクターブ）</option>
+          <option value="hard">難（半音含む全12音）</option>
+        </select>
+      </label>
+      <label>音数（A・Cモード）:
+        <select id="noteCount">
+          <option value="2">2音</option>
+          <option value="3" selected>3音</option>
+          <option value="4">4音</option>
+          <option value="5">5音</option>
+        </select>
+      </label>
+      <label>判定の厳しさ: ±<span id="tolVal">50</span>セント
+        <input type="range" id="tolerance" min="20" max="100" step="5" value="50">
+      </label>
+      <label>判定モード（A・C）:
+        <select id="judgeMode">
+          <option value="relative" selected>相対音感（インターバル一致）</option>
+          <option value="absolute">絶対音感（音高そのまま）</option>
+        </select>
+      </label>
+      <label>無音判定しきい値 (RMS): <span id="rmsThVal">0.005</span>
+        <input type="range" id="rmsTh" min="1" max="50" step="1" value="5">
+      </label>
+      <div class="small">※ うまく拾えない場合は「🔧 マイクテスト」で動作確認してください。</div>
+    </details>
+  </div>
+</div>
+
+<!-- ===== マイクテストモード ===== -->
+<div id="testView" class="hidden">
+  <div class="card">
+    <h3 style="margin-top:0">🔧 マイクテスト</h3>
+    <div class="small" style="margin-bottom:8px">
+      下の「マイク開始」を押して声を出してください。緑バーが反応すれば音は拾えています。
+    </div>
+    <div class="controls">
+      <button id="micStart">🎤 マイク開始</button>
+      <button id="micStop" class="secondary">⏹ 停止</button>
+      <button id="beepTest" class="secondary">🔔 ビープ440Hz</button>
+    </div>
+
+    <div style="margin-top:14px">
+      <div class="small">入力レベル (RMS)</div>
+      <div class="vol-bar-wrap"><div class="vol-bar" id="volBar"></div></div>
+
+      <div class="stat-row"><span class="stat-label">権限ステータス</span><span class="stat-val" id="sPerm">未確認</span></div>
+      <div class="stat-row"><span class="stat-label">セキュアコンテキスト</span><span class="stat-val" id="sSecure">―</span></div>
+      <div class="stat-row"><span class="stat-label">プロトコル</span><span class="stat-val" id="sProto">―</span></div>
+      <div class="stat-row"><span class="stat-label">AudioContext状態</span><span class="stat-val" id="sCtx">―</span></div>
+      <div class="stat-row"><span class="stat-label">サンプルレート</span><span class="stat-val" id="sRate">―</span></div>
+      <div class="stat-row"><span class="stat-label">ストリーム状態</span><span class="stat-val" id="sStream">―</span></div>
+      <div class="stat-row"><span class="stat-label">トラックラベル</span><span class="stat-val" id="sLabel">―</span></div>
+      <div class="stat-row"><span class="stat-label">瞬時RMS</span><span class="stat-val" id="sRms">―</span></div>
+      <div class="stat-row"><span class="stat-label">ピーク振幅</span><span class="stat-val" id="sPeak">―</span></div>
+      <div class="stat-row"><span class="stat-label">検出周波数</span><span class="stat-val" id="sFreq">―</span></div>
+      <div class="stat-row"><span class="stat-label">検出音名</span><span class="stat-val" id="sNote">―</span></div>
+    </div>
+
+    <canvas id="testViz" width="640" height="90" style="margin-top:10px"></canvas>
+
+    <div style="margin-top:10px">
+      <div class="small">📜 ログ</div>
+      <div id="log"></div>
+    </div>
+
+    <details style="margin-top:10px">
+      <summary>🛠 マイク詳細設定（試す価値あり）</summary>
+      <label><input type="checkbox" id="optEC"> echoCancellation</label>
+      <label><input type="checkbox" id="optNS"> noiseSuppression</label>
+      <label><input type="checkbox" id="optAGC" checked> autoGainControl</label>
+      <div class="small">Android Edgeで反応しない場合、AGCをONのままにすると拾いやすくなる場合があります。設定変更後「マイク開始」で再接続します。</div>
+    </details>
+  </div>
+</div>
+
+<script>
+// ==================== 基本データ ====================
+const NOTE_NAMES_EN = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const NOTE_NAMES_JP = ['ド','ド#','レ','レ#','ミ','ファ','ファ#','ソ','ソ#','ラ','ラ#','シ'];
+const SCALE_EASY   = [60,62,64,65,67];
+const SCALE_NORMAL = [60,62,64,65,67,69,71,72];
+const SCALE_HARD   = [60,61,62,63,64,65,66,67,68,69,70,71,72];
+
+let currentMode = 'A';
+let currentTarget = [];
+let correct = 0, total = 0;
+
+// ==================== ログ ====================
+function log(msg){
+  const el = document.getElementById('log');
+  if (!el) return;
+  const t = new Date().toTimeString().slice(0,8);
+  el.textContent += `[${t}] ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
+  console.log('[pitch]', msg);
+}
+
+// ==================== AudioContext ====================
+let audioCtx;
+function ensureCtx() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    log('AudioContext作成 sampleRate=' + audioCtx.sampleRate);
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume().then(() => log('AudioContext resumed'));
+  }
+}
+
+// ==================== 音名 ====================
+function midiToFreq(m){ return 440 * Math.pow(2, (m-69)/12); }
+function midiToName(m, jp=true){
+  const n = Math.round(m);
+  const names = jp ? NOTE_NAMES_JP : NOTE_NAMES_EN;
+  return names[((n%12)+12)%12] + (jp ? '' : Math.floor(n/12-1));
+}
+function freqToMidi(f){ return 69 + 12 * Math.log2(f/440); }
+
+// ==================== お手本再生 ====================
+function playNote(midi, dur=0.5, delay=0){
+  ensureCtx();
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'triangle';
+  o.frequency.value = midiToFreq(midi);
+  const t0 = audioCtx.currentTime + delay;
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(0.25, t0 + 0.02);
+  g.gain.linearRampToValueAtTime(0.20, t0 + dur - 0.05);
+  g.gain.linearRampToValueAtTime(0, t0 + dur);
+  o.connect(g).connect(audioCtx.destination);
+  o.start(t0);
+  o.stop(t0 + dur + 0.05);
+}
+function playMelody(notes){
+  notes.forEach((n,i) => playNote(n, 0.45, i*0.55));
+}
+
+// ==================== マイク ====================
+let micStream, analyser, pitchBuf, sourceNode;
+
+async function startMic(opts={}){
+  ensureCtx();
+  // 既存ストリームを停止して再接続できるように
+  if (micStream){
+    micStream.getTracks().forEach(t => t.stop());
+    micStream = null;
+    sourceNode = null;
+  }
+  log('getUserMedia呼び出し ' + JSON.stringify(opts));
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: !!opts.ec,
+        noiseSuppression: !!opts.ns,
+        autoGainControl: opts.agc !== false
+      }
+    });
+  } catch(e){
+    log('❌ getUserMedia失敗: ' + e.name + ' / ' + e.message);
+    alert('マイクの取得に失敗しました: ' + e.message + '\n\n対処:\n・https または file:// で開く\n・ブラウザのサイト権限でマイクを許可\n・他アプリがマイクを占有していないか確認');
+    throw e;
+  }
+  const tracks = micStream.getAudioTracks();
+  log('✅ ストリーム取得 tracks=' + tracks.length + ' label="' + (tracks[0]?.label||'') + '"');
+  sourceNode = audioCtx.createMediaStreamSource(micStream);
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 1024; // 軽量化（旧2048→1024）
+  pitchBuf = new Float32Array(analyser.fftSize);
+  sourceNode.connect(analyser);
+  log('AnalyserNode接続完了 fftSize=' + analyser.fftSize);
+  return true;
+}
+
+// ==================== ピッチ検出（軽量自己相関） ====================
+function autoCorrelate(buf, sr, rmsTh){
+  const SIZE = buf.length;
+  let rms = 0;
+  let peak = 0;
+  for (let i=0; i<SIZE; i++){
+    const v = buf[i];
+    rms += v*v;
+    if (Math.abs(v) > peak) peak = Math.abs(v);
+  }
+  rms = Math.sqrt(rms/SIZE);
+  if (rms < rmsTh) return {f:-1, rms, peak};
+
+  // 軽量自己相関：lagを離散的に
+  const MIN_F = 70, MAX_F = 1000;
+  const maxLag = Math.floor(sr/MIN_F);
+  const minLag = Math.floor(sr/MAX_F);
+  let bestLag = -1, bestVal = 0;
+  for (let lag=minLag; lag<=maxLag; lag++){
+    let sum = 0;
+    for (let i=0; i<SIZE-lag; i++) sum += buf[i]*buf[i+lag];
+    if (sum > bestVal){ bestVal = sum; bestLag = lag; }
+  }
+  if (bestLag < 0) return {f:-1, rms, peak};
+  // 放物線補間
+  const c1 = corrAt(buf, bestLag-1), c2 = corrAt(buf, bestLag), c3 = corrAt(buf, bestLag+1);
+  const a = (c1 + c3 - 2*c2) / 2;
+  const b = (c3 - c1) / 2;
+  let lag = bestLag;
+  if (a) lag = bestLag - b/(2*a);
+  return {f: sr/lag, rms, peak};
+}
+function corrAt(buf, lag){
+  let s=0; for (let i=0; i<buf.length-lag; i++) s += buf[i]*buf[i+lag]; return s;
+}
+
+// ==================== 訓練モードのループ ====================
+let recording = false, recordPitches = [];
+async function startRecord(){
+  await startMic({ec:false, ns:false, agc:true}); // AGCはON（拾いやすさ優先）
+  recording = true;
+  recordPitches = [];
+  loopAnalyze();
+}
+function stopRecord(){
+  recording = false;
+  setTimeout(judge, 100);
+}
+function getRmsTh(){
+  return parseInt(document.getElementById('rmsTh').value) / 1000;
+}
+function loopAnalyze(){
+  if (!recording) { drawViz(); return; }
+  analyser.getFloatTimeDomainData(pitchBuf);
+  const {f, rms} = autoCorrelate(pitchBuf, audioCtx.sampleRate, getRmsTh());
+  if (f > 0){
+    const m = freqToMidi(f);
+    recordPitches.push({m, f, t: performance.now()});
+    document.getElementById('pitchLive').textContent = midiToName(m);
+    document.getElementById('pitchHz').textContent = ` (${f.toFixed(1)} Hz / RMS ${rms.toFixed(3)})`;
+  } else {
+    recordPitches.push({m: null, f: 0, t: performance.now()});
+    document.getElementById('pitchHz').textContent = ` (RMS ${rms.toFixed(3)} / 無音判定)`;
+  }
+  drawViz();
+  requestAnimationFrame(loopAnalyze);
+}
+
+// ==================== 可視化（訓練モード） ====================
+const canvas = document.getElementById('viz');
+const ctx2 = canvas.getContext('2d');
+function drawViz(){
+  ctx2.clearRect(0,0,canvas.width,canvas.height);
+  ctx2.strokeStyle = '#e5e5ea';
+  for (let m=55; m<=80; m+=5){
+    const y = canvas.height - ((m-55)/25)*canvas.height;
+    ctx2.beginPath(); ctx2.moveTo(0,y); ctx2.lineTo(canvas.width,y); ctx2.stroke();
+  }
+  ctx2.strokeStyle = '#34c759';
+  ctx2.setLineDash([4,4]);
+  currentTarget.forEach(m => {
+    const y = canvas.height - ((m-55)/25)*canvas.height;
+    ctx2.beginPath(); ctx2.moveTo(0,y); ctx2.lineTo(canvas.width,y); ctx2.stroke();
+  });
+  ctx2.setLineDash([]);
+  ctx2.strokeStyle = '#007aff';
+  ctx2.lineWidth = 2;
+  ctx2.beginPath();
+  const data = recordPitches.slice(-300);
+  let started = false;
+  data.forEach((p,i) => {
+    if (p.m === null) { started = false; return; }
+    const x = i*(canvas.width/300);
+    const y = canvas.height - ((p.m-55)/25)*canvas.height;
+    if (!started){ ctx2.moveTo(x,y); started = true; }
+    else ctx2.lineTo(x,y);
+  });
+  ctx2.stroke();
+  ctx2.lineWidth = 1;
+}
+
+// ==================== セグメント化 & 判定 ====================
+function segmentNotes(pitches){
+  const valid = pitches.filter(p => p.m !== null).map(p => p.m);
+  if (valid.length < 5) return [];
+  const segs = [];
+  let cur = [valid[0]];
+  for (let i=1; i<valid.length; i++){
+    const recentMed = median(cur.slice(-5));
+    if (Math.abs(valid[i] - recentMed) < 0.8){
+      cur.push(valid[i]);
+    } else {
+      if (cur.length >= 6) segs.push(median(cur));
+      cur = [valid[i]];
+    }
+  }
+  if (cur.length >= 6) segs.push(median(cur));
+  return segs;
+}
+function median(arr){
+  const s = [...arr].sort((a,b)=>a-b);
+  return s[Math.floor(s.length/2)];
+}
+function judge(){
+  const segs = segmentNotes(recordPitches);
+  total++;
+  const tolCents = parseInt(document.getElementById('tolerance').value);
+  const tol = tolCents / 100;
+  const judgeMode = document.getElementById('judgeMode').value;
+
+  let ok = true;
+  let detail = '';
+
+  if (segs.length === 0){
+    ok = false;
+    detail = '音が検出できませんでした（マイクテストモードで確認してください）';
+  } else if (segs.length !== currentTarget.length){
+    ok = false;
+    detail = `音数が違います（検出${segs.length}音 / 正解${currentTarget.length}音）`;
+  } else {
+    const useRelative = (currentMode === 'A') || (currentMode === 'C' && judgeMode === 'relative');
+    const offset = useRelative ? (segs[0] - currentTarget[0]) : 0;
+    const errs = [];
+    for (let i=0; i<segs.length; i++){
+      const err = (segs[i] - offset) - currentTarget[i];
+      errs.push(err);
+      if (Math.abs(err) > tol) ok = false;
+    }
+    detail = `誤差: ${errs.map(e => (e*100).toFixed(0)+'¢').join(' / ')}`;
+  }
+  if (ok) correct++;
+  document.getElementById('score').textContent = `スコア: ${correct} / ${total}`;
+  const detected = segs.map(m => midiToName(m)).join(' ');
+  const target = currentTarget.map(m => midiToName(m)).join(' ');
+  document.getElementById('display').innerHTML = ok
+    ? `<span class="result-correct">⭕ 正解！</span><div class="small">${detected}</div>`
+    : `<span class="result-wrong">❌ ${detail}</span>
+       <div class="small">あなた: ${detected || '―'}<br>正解: ${target}</div>`;
+}
+
+// ==================== 出題 ====================
+function genQuestion(){
+  const diff = document.getElementById('difficulty').value;
+  const scale = diff==='easy' ? SCALE_EASY : diff==='normal' ? SCALE_NORMAL : SCALE_HARD;
+  const baseCount = parseInt(document.getElementById('noteCount').value);
+  const len = currentMode === 'B' ? Math.min(2, baseCount) : baseCount;
+  const arr = [];
+  let last = -1;
+  for (let i=0; i<len; i++){
+    let pick;
+    do { pick = scale[Math.floor(Math.random()*scale.length)]; }
+    while (pick === last && scale.length > 1);
+    arr.push(pick); last = pick;
+  }
+  currentTarget = arr;
+  if (currentMode === 'C'){
+    document.getElementById('display').innerHTML =
+      currentTarget.map(m => `<span style="color:#007aff">${midiToName(m)}</span>`).join(' ');
+  } else {
+    document.getElementById('display').textContent = '？';
+  }
+  document.getElementById('instruction').textContent =
+    currentMode === 'A' ? '▶ お手本→🎤 で同じメロディを鼻歌で再現' :
+    currentMode === 'B' ? '▶ お手本→🎤 で「同じ高さ」を鼻歌で（絶対）' :
+                         '上の音名を🎤 で鼻歌で歌ってください';
+  recordPitches = [];
+  drawViz();
+}
+
+// ==================== マイクテストモード ====================
+let testRunning = false;
+const testCanvas = document.getElementById('testViz');
+const tctx = testCanvas.getContext('2d');
+let testWaveBuf = new Float32Array(0);
+
+async function checkPermission(){
+  try {
+    if (navigator.permissions){
+      const p = await navigator.permissions.query({name:'microphone'});
+      document.getElementById('sPerm').textContent = p.state;
+      document.getElementById('sPerm').className = 'stat-val ' + (p.state==='granted'?'ok':p.state==='denied'?'ng':'');
+      log('Permission API: ' + p.state);
+    } else {
+      document.getElementById('sPerm').textContent = '(Permissions API非対応)';
+    }
+  } catch(e){
+    document.getElementById('sPerm').textContent = '(取得不可)';
+    log('Permission取得失敗: ' + e.message);
+  }
+  document.getElementById('sSecure').textContent = window.isSecureContext ? 'secure ✅' : 'NOT secure ❌';
+  document.getElementById('sSecure').className = 'stat-val ' + (window.isSecureContext?'ok':'ng');
+  document.getElementById('sProto').textContent = location.protocol;
+  if (location.protocol !== 'https:' && location.protocol !== 'file:' && location.hostname !== 'localhost'){
+    log('⚠ HTTPでアクセスしています。getUserMediaはhttpsまたはfile://が必要です');
+  }
+}
+
+async function startMicTest(){
+  testRunning = false;
+  await new Promise(r => setTimeout(r, 50));
+  const opts = {
+    ec: document.getElementById('optEC').checked,
+    ns: document.getElementById('optNS').checked,
+    agc: document.getElementById('optAGC').checked
+  };
+  try {
+    await startMic(opts);
+    document.getElementById('sCtx').textContent = audioCtx.state;
+    document.getElementById('sCtx').className = 'stat-val ' + (audioCtx.state==='running'?'ok':'ng');
+    document.getElementById('sRate').textContent = audioCtx.sampleRate + ' Hz';
+    const tracks = micStream.getAudioTracks();
+    const active = tracks.some(t => t.enabled && t.readyState==='live');
+    document.getElementById('sStream').textContent = active ? 'live ✅' : 'inactive ❌';
+    document.getElementById('sStream').className = 'stat-val ' + (active?'ok':'ng');
+    document.getElementById('sLabel').textContent = tracks[0]?.label || '(空)';
+    testRunning = true;
+    testLoop();
+  } catch(e){
+    document.getElementById('sStream').textContent = 'エラー';
+    document.getElementById('sStream').className = 'stat-val ng';
+  }
+}
+
+function stopMicTest(){
+  testRunning = false;
+  if (micStream){ micStream.getTracks().forEach(t => t.stop()); }
+  log('停止');
+}
+
+function testLoop(){
+  if (!testRunning) return;
+  analyser.getFloatTimeDomainData(pitchBuf);
+  const {f, rms, peak} = autoCorrelate(pitchBuf, audioCtx.sampleRate, 0.001);
+  // バー
+  const pct = Math.min(100, rms*1000);
+  document.getElementById('volBar').style.width = pct + '%';
+  document.getElementById('sRms').textContent = rms.toFixed(4);
+  document.getElementById('sPeak').textContent = peak.toFixed(4);
+  document.getElementById('sFreq').textContent = f>0 ? f.toFixed(1)+' Hz' : '―';
+  document.getElementById('sNote').textContent = f>0 ? midiToName(freqToMidi(f)) : '―';
+
+  // 波形描画
+  tctx.clearRect(0,0,testCanvas.width,testCanvas.height);
+  tctx.strokeStyle = '#007aff';
+  tctx.beginPath();
+  const W = testCanvas.width, H = testCanvas.height;
+  for (let i=0; i<pitchBuf.length; i++){
+    const x = (i/pitchBuf.length)*W;
+    const y = H/2 - pitchBuf[i]*H/2;
+    if (i===0) tctx.moveTo(x,y); else tctx.lineTo(x,y);
+  }
+  tctx.stroke();
+  // 中心線
+  tctx.strokeStyle = '#ccc';
+  tctx.beginPath(); tctx.moveTo(0,H/2); tctx.lineTo(W,H/2); tctx.stroke();
+
+  requestAnimationFrame(testLoop);
+}
+
+// ==================== UIイベント ====================
+document.getElementById('play').onclick = () => playMelody(currentTarget);
+
+document.getElementById('record').onclick = async (e) => {
+  const btn = e.currentTarget;
+  if (!recording){
+    btn.textContent = '⏹ 停止して判定';
+    btn.classList.add('recording');
+    try { await startRecord(); }
+    catch(err){ btn.textContent='🎤 鼻歌で答える'; btn.classList.remove('recording'); }
+  } else {
+    btn.textContent = '🎤 鼻歌で答える';
+    btn.classList.remove('recording');
+    stopRecord();
+  }
+};
+
+document.getElementById('next').onclick = () => {
+  document.getElementById('display').textContent = '—';
+  genQuestion();
+};
+
+document.querySelectorAll('.mode-tabs button').forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll('.mode-tabs button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    const m = b.id.replace('mode','');
+    if (m === 'T'){
+      document.getElementById('trainView').classList.add('hidden');
+      document.getElementById('testView').classList.remove('hidden');
+      currentMode = 'T';
+      checkPermission();
+    } else {
+      document.getElementById('trainView').classList.remove('hidden');
+      document.getElementById('testView').classList.add('hidden');
+      currentMode = m;
+      genQuestion();
+    }
+  };
+});
+
+document.getElementById('tolerance').oninput = e => document.getElementById('tolVal').textContent = e.target.value;
+document.getElementById('rmsTh').oninput   = e => document.getElementById('rmsThVal').textContent = (e.target.value/1000).toFixed(3);
+['difficulty','noteCount','judgeMode'].forEach(id => {
+  document.getElementById(id).onchange = genQuestion;
+});
+
+document.getElementById('micStart').onclick = startMicTest;
+document.getElementById('micStop').onclick  = stopMicTest;
+document.getElementById('beepTest').onclick = () => playNote(69, 1.0); // A4 (440Hz)
+
+genQuestion();
+</script>
+</body>
+</html>
