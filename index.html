@@ -47,6 +47,19 @@
   #log { font-family:monospace; font-size:11px; background:#1c1c1e; color:#0f0; padding:8px;
          border-radius:6px; max-height:140px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; }
 </style>
+
+<!-- ===== PWA 対応 ===== -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#007aff">
+<meta name="description" content="鼻歌で音感を鍛えるソルフェージュ風アプリ">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="音感トレ">
+<meta name="mobile-web-app-capable" content="yes">
+<!-- 検索エンジン除外 -->
+<meta name="robots" content="noindex, nofollow">
+
 </head>
 <body>
 <h1>🎵 音感トレーニング v2</h1>
@@ -589,5 +602,17 @@ document.getElementById('beepTest').onclick = () => playNote(69, 1.0); // A4 (44
 
 genQuestion();
 </script>
+
+<!-- ===== Service Worker 登録 ===== -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js')
+      .then(reg => console.log('[PWA] Service Worker registered:', reg.scope))
+      .catch(err => console.warn('[PWA] Service Worker registration failed:', err));
+  });
+}
+</script>
+
 </body>
 </html>
