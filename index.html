@@ -62,79 +62,67 @@
     background: #e5e5ea;
     color: #1c1c1e;
   }
-  .tn-btn.active {
-    background: var(--primary);
-    color: white;
-  }
-  .tn-btn.passed {
-    background: var(--ok);
-    color: white;
-  }
-  .tuning-display {
-    text-align: center;
-    margin: 16px 0 8px;
-  }
-  .tuning-target {
-    font-size: 14px;
-    color: #666;
-  }
+  .tn-btn.active { background: var(--primary); color: white; }
+  .tn-btn.passed { background: var(--ok); color: white; }
+  .tuning-display { text-align: center; margin: 16px 0 8px; }
+  .tuning-target { font-size: 14px; color: #666; }
   .tuning-current {
-    font-size: 36px;
-    font-weight: bold;
-    color: var(--primary);
-    min-height: 48px;
-    margin: 4px 0;
+    font-size: 36px; font-weight: bold; color: var(--primary);
+    min-height: 48px; margin: 4px 0;
   }
-  .tuning-cents {
-    font-size: 18px;
-    color: #444;
-    font-family: monospace;
-  }
+  .tuning-cents { font-size: 18px; color: #444; font-family: monospace; }
   .tuning-cents.ok { color: var(--ok); font-weight: bold; }
   .tuning-cents.ng { color: var(--ng); }
   .cents-bar-wrap { margin: 12px 0; }
   .cents-scale {
-    display: flex;
-    justify-content: space-between;
-    font-size: 10px;
-    color: #888;
-    margin-bottom: 2px;
+    display: flex; justify-content: space-between;
+    font-size: 10px; color: #888; margin-bottom: 2px;
   }
   .cents-bar-track {
-    position: relative;
-    width: 100%;
-    height: 28px;
-    background: #f0f0f0;
-    border-radius: 6px;
-    overflow: hidden;
+    position: relative; width: 100%; height: 28px;
+    background: #f0f0f0; border-radius: 6px; overflow: hidden;
   }
   .cents-zone-green {
-    position: absolute;
-    left: 40%;
-    width: 20%;
-    height: 100%;
+    position: absolute; left: 40%; width: 20%; height: 100%;
     background: rgba(52, 199, 89, 0.25);
   }
   .cents-bar-center {
-    position: absolute;
-    left: 50%;
-    width: 2px;
-    height: 100%;
-    background: #555;
+    position: absolute; left: 50%; width: 2px; height: 100%; background: #555;
   }
   .cents-bar-indicator {
-    position: absolute;
-    top: 4px;
-    width: 6px;
-    height: 20px;
-    background: var(--primary);
-    border-radius: 3px;
-    left: 50%;
-    transform: translateX(-50%);
+    position: absolute; top: 4px; width: 6px; height: 20px;
+    background: var(--primary); border-radius: 3px;
+    left: 50%; transform: translateX(-50%);
     transition: left 0.08s, background 0.2s;
   }
   .cents-bar-indicator.ok { background: var(--ok); }
   .cents-bar-indicator.ng { background: var(--ng); }
+  /* キー選択 */
+  .key-selector {
+    display: flex;
+    gap: 6px;
+    margin: 8px 0 4px;
+  }
+  .key-btn {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 4px;
+    font-size: 14px;
+    font-weight: bold;
+    background: #e5e5ea;
+    color: #1c1c1e;
+    border-radius: 8px;
+    margin: 0;
+  }
+  .key-btn.active {
+    background: var(--primary);
+    color: white;
+  }
+  .key-label {
+    font-size: 12px;
+    color: #666;
+    margin: 2px 0 6px;
+  }
 </style>
 
 <!-- ===== PWA 対応 ===== -->
@@ -146,7 +134,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="音感トレ">
 <meta name="mobile-web-app-capable" content="yes">
-<!-- 検索エンジン除外 -->
 <meta name="robots" content="noindex, nofollow">
 </head>
 <body>
@@ -222,6 +209,13 @@
       練習したい音を選んで、その音を鼻歌で出してみてください。お手本が自動で1回鳴ります。
     </div>
 
+    <!-- キー選択 -->
+    <div class="key-selector" id="keySelector">
+      <button class="key-btn" data-key="male">♂ 男性 (C3)</button>
+      <button class="key-btn active" data-key="female">♀ 女性 (C4)</button>
+    </div>
+    <div class="key-label" id="keyLabel">現在のキー: 女性 (C4オクターブ)</div>
+
     <!-- 音階セレクタ -->
     <div class="tuning-note-selector" id="tuningNoteSel">
       <button data-midi="60" class="tn-btn active">ド</button>
@@ -255,7 +249,6 @@
       </div>
     </div>
 
-    <!-- 安定度メーター -->
     <div class="stat-row" style="margin-top:14px">
       <span class="stat-label">🎯 安定度（過去2秒）</span>
       <span class="stat-val" id="tnStability">0%</span>
@@ -265,14 +258,12 @@
       <span class="stat-val" id="tnPassCount">0</span>
     </div>
 
-    <!-- 操作ボタン -->
     <div class="controls">
       <button id="tnStart">🎤 開始</button>
       <button id="tnStop" class="secondary">⏹ 停止</button>
       <button id="tnPlay" class="secondary">▶ お手本</button>
     </div>
 
-    <!-- 設定 -->
     <details style="margin-top:10px">
       <summary>⚙️ チューニング設定</summary>
       <label>合格判定: ±<span id="tnTolVal">20</span>セント
@@ -431,8 +422,7 @@ async function startMic(opts={}){
 // ==================== ピッチ検出（軽量自己相関） ====================
 function autoCorrelate(buf, sr, rmsTh){
   const SIZE = buf.length;
-  let rms = 0;
-  let peak = 0;
+  let rms = 0, peak = 0;
   for (let i=0; i<SIZE; i++){
     const v = buf[i];
     rms += v*v;
@@ -695,17 +685,60 @@ function testLoop(){
 
 // ==================== チューニングモード ====================
 let tuningRunning = false;
-let tuningTarget = 60;
+let tuningKey = 'female';   // 'male' or 'female'
+let tuningTarget = 60;      // 現在の目標MIDIノート（キーに応じて変動）
 let tuningHistory = [];
 let tuningStableStart = null;
 let tuningPassCount = 0;
 const TUNING_WINDOW_MS = 2000;
+
+// キーごとの音階定義
+const TUNING_NOTES = {
+  male:   [48, 50, 52, 53, 55, 57, 59],  // C3-B3 (130.8Hz〜246.9Hz)
+  female: [60, 62, 64, 65, 67, 69, 71]   // C4-B4 (261.6Hz〜493.9Hz)
+};
+const KEY_LABELS = {
+  male:   '男性 (C3オクターブ)',
+  female: '女性 (C4オクターブ)'
+};
+
+// localStorageから前回のキー設定を復元
+try {
+  const savedKey = localStorage.getItem('pitch-trainer-key');
+  if (savedKey === 'male' || savedKey === 'female') {
+    tuningKey = savedKey;
+  }
+} catch(e) { /* localStorage非対応環境は無視 */ }
 
 function getTuningTol() {
   return parseInt(document.getElementById('tnTol').value);
 }
 function getTuningStableMs() {
   return parseInt(document.getElementById('tnStableMs').value);
+}
+
+function setTuningKey(key) {
+  if (key !== 'male' && key !== 'female') return;
+  tuningKey = key;
+  const notes = TUNING_NOTES[key];
+  // 7音ボタンの data-midi を書き換え、passedクリア
+  document.querySelectorAll('.tn-btn').forEach((b, i) => {
+    b.dataset.midi = notes[i];
+    b.classList.remove('passed');
+  });
+  // キー選択ボタンのactive表示
+  document.querySelectorAll('.key-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.key === key);
+  });
+  document.getElementById('keyLabel').textContent = '現在のキー: ' + KEY_LABELS[key];
+  // 保存
+  try { localStorage.setItem('pitch-trainer-key', key); } catch(e) {}
+  // 合格カウントもリセット（キー変えたら仕切り直し）
+  tuningPassCount = 0;
+  document.getElementById('tnPassCount').textContent = '0';
+  // ターゲットをそのキーの「ド」にセット
+  setTuningTarget(notes[0]);
+  log('キー切替: ' + key);
 }
 
 function setTuningTarget(midi) {
@@ -770,7 +803,6 @@ function tuningLoop() {
 
   tuningHistory.push({t: now, inRange});
   tuningHistory = tuningHistory.filter(h => now - h.t <= TUNING_WINDOW_MS);
-
   const inCount = tuningHistory.filter(h => h.inRange).length;
   const stability = tuningHistory.length > 0
     ? Math.round(100 * inCount / tuningHistory.length) : 0;
@@ -799,7 +831,7 @@ function onTuningPass() {
   log(`✅ ${midiToName(tuningTarget)} 合格 (累計${tuningPassCount})`);
 
   if (document.getElementById('tnAutoNext').checked) {
-    const targets = [60,62,64,65,67,69,71];
+    const targets = TUNING_NOTES[tuningKey];
     const idx = targets.indexOf(tuningTarget);
     const next = targets[(idx + 1) % targets.length];
     setTimeout(() => setTuningTarget(next), 600);
@@ -831,11 +863,9 @@ document.querySelectorAll('.mode-tabs button').forEach(b => {
     document.querySelectorAll('.mode-tabs button').forEach(x => x.classList.remove('active'));
     b.classList.add('active');
     const m = b.id.replace('mode','');
-    // 全ビューを隠してから対象を出す
     document.getElementById('trainView').classList.add('hidden');
     document.getElementById('tuningView').classList.add('hidden');
     document.getElementById('testView').classList.add('hidden');
-    // モード切替時は既存マイクストリームを止める
     if (currentMode === 'D' && tuningRunning) stopTuning();
     if (currentMode === 'T' && testRunning) stopMicTest();
     if (recording) { recording = false; }
@@ -847,7 +877,7 @@ document.querySelectorAll('.mode-tabs button').forEach(b => {
     } else if (m === 'D'){
       document.getElementById('tuningView').classList.remove('hidden');
       currentMode = 'D';
-      setTuningTarget(60);
+      setTuningKey(tuningKey);  // 保存されたキーで初期化（内部でsetTuningTargetも呼ばれる）
     } else {
       document.getElementById('trainView').classList.remove('hidden');
       currentMode = m;
@@ -869,6 +899,9 @@ document.getElementById('beepTest').onclick = () => playNote(69, 1.0);
 // チューニングモードのイベント
 document.querySelectorAll('.tn-btn').forEach(b => {
   b.onclick = () => setTuningTarget(parseInt(b.dataset.midi));
+});
+document.querySelectorAll('.key-btn').forEach(b => {
+  b.onclick = () => setTuningKey(b.dataset.key);
 });
 document.getElementById('tnStart').onclick = startTuning;
 document.getElementById('tnStop').onclick = stopTuning;
