@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>🎵 音感トレーニング v3</title>
+<title>🎵 音感トレーニング v3.1</title>
 <style>
   :root { --primary:#007aff; --ok:#34c759; --ng:#ff3b30; --warn:#ff9500; --bg:#f5f5f7; }
   * { box-sizing: border-box; }
@@ -219,7 +219,7 @@
 <meta name="robots" content="noindex, nofollow">
 </head>
 <body>
-<h1>🎵 音感トレーニング v3 <span class="global-key-badge" id="keyBadge">♀ 女性</span></h1>
+<h1>🎵 音感トレーニング v3.1 <span class="global-key-badge" id="keyBadge">♀ 女性</span></h1>
 
 <div class="card mode-tabs">
   <button id="modeD" class="active">🎯 チューニング</button>
@@ -577,17 +577,20 @@ async function startMic(opts={}){
   return true;
 }
 
-// ==================== ピッチ検出（軽量自己相関） ====================
+// ==================== ピッチ検出（軽量自己相関 + 品質チェック） ====================
+// Step 3対策3: 自己相関の正規化品質スコアを返し、低品質な検出は弾く
 function autoCorrelate(buf, sr, rmsTh){
   const SIZE = buf.length;
   let rms = 0, peak = 0;
+  let energy = 0;
   for (let i=0; i<SIZE; i++){
     const v = buf[i];
     rms += v*v;
+    energy += v*v;
     if (Math.abs(v) > peak) peak = Math.abs(v);
   }
   rms = Math.sqrt(rms/SIZE);
-  if (rms < rmsTh) return {f:-1, rms, peak};
+  if (rms < rmsTh) return {f:-1, rms, peak, q:0};
   const MIN_F = 70, MAX_F = 1000;
   const maxLag = Math.floor(sr/MIN_F);
   const minLag = Math.floor(sr/MAX_F);
@@ -597,24 +600,53 @@ function autoCorrelate(buf, sr, rmsTh){
     for (let i=0; i<SIZE-lag; i++) sum += buf[i]*buf[i+lag];
     if (sum > bestVal){ bestVal = sum; bestLag = lag; }
   }
-  if (bestLag < 0) return {f:-1, rms, peak};
+  if (bestLag < 0) return {f:-1, rms, peak, q:0};
+  // 品質スコア: 正規化相関値（0〜1）
+  // bestVal を energy で割って正規化、これが0.3以下なら信頼度低い
+  const q = energy > 0 ? bestVal / energy : 0;
+  if (q < 0.3) return {f:-1, rms, peak, q};  // 信頼度低い→検出失敗扱い
+  // 放物線補間
   const c1 = corrAt(buf, bestLag-1), c2 = corrAt(buf, bestLag), c3 = corrAt(buf, bestLag+1);
   const a = (c1 + c3 - 2*c2) / 2;
   const b = (c3 - c1) / 2;
   let lag = bestLag;
   if (a) lag = bestLag - b/(2*a);
-  return {f: sr/lag, rms, peak};
+  return {f: sr/lag, rms, peak, q};
 }
 function corrAt(buf, lag){
   let s=0; for (let i=0; i<buf.length-lag; i++) s += buf[i]*buf[i+lag]; return s;
 }
 
+// Step 3対策2: オクターブジャンプ抑制
+// 直近の安定したピッチに対して、±12半音した候補がより近ければそちらを採用
+function suppressOctaveJump(currentMidi, recentMidis){
+  if (recentMidis.length < 2) return currentMidi;
+  // 直近の中央値を「基準ピッチ」とする
+  const ref = medianOf(recentMidis);
+  const candidates = [currentMidi, currentMidi - 12, currentMidi + 12];
+  let best = currentMidi;
+  let bestDist = Math.abs(currentMidi - ref);
+  for (const c of candidates){
+    const d = Math.abs(c - ref);
+    if (d < bestDist){ best = c; bestDist = d; }
+  }
+  return best;
+}
+function medianOf(arr){
+  const s = [...arr].sort((a,b)=>a-b);
+  return s[Math.floor(s.length/2)];
+}
+
 // ==================== 訓練モードのループ ====================
 let recording = false, recordPitches = [];
+let rawPitchWindow = [];  // Step 3対策1: 中央値フィルタ用バッファ（直近N生ピッチ）
+const SMOOTH_WINDOW = 5;  // 中央値フィルタの窓サイズ
+
 async function startRecord(){
   await startMic({ec:false, ns:false, agc:true});
   recording = true;
   recordPitches = [];
+  rawPitchWindow = [];
   loopAnalyze();
 }
 function stopRecord(){
@@ -627,14 +659,24 @@ function getRmsTh(){
 function loopAnalyze(){
   if (!recording) { drawViz(); return; }
   analyser.getFloatTimeDomainData(pitchBuf);
-  const {f, rms} = autoCorrelate(pitchBuf, audioCtx.sampleRate, getRmsTh());
+  const {f, rms, q} = autoCorrelate(pitchBuf, audioCtx.sampleRate, getRmsTh());
   if (f > 0){
-    const m = freqToMidi(f);
-    recordPitches.push({m, f, t: performance.now()});
-    document.getElementById('pitchLive').textContent = midiToName(m);
-    document.getElementById('pitchHz').textContent = ` (${f.toFixed(1)} Hz / RMS ${rms.toFixed(3)})`;
+    let m = freqToMidi(f);
+    // Step 3対策2: オクターブジャンプ抑制（直近の中央値を基準に補正）
+    if (rawPitchWindow.length >= 2){
+      m = suppressOctaveJump(m, rawPitchWindow);
+    }
+    // Step 3対策1: 生ピッチ窓に追加→中央値でスムージング
+    rawPitchWindow.push(m);
+    if (rawPitchWindow.length > SMOOTH_WINDOW) rawPitchWindow.shift();
+    const smoothed = medianOf(rawPitchWindow);
+    recordPitches.push({m: smoothed, f, t: performance.now(), q});
+    document.getElementById('pitchLive').textContent = midiToName(smoothed);
+    document.getElementById('pitchHz').textContent = ` (${f.toFixed(1)} Hz / RMS ${rms.toFixed(3)} / Q ${q.toFixed(2)})`;
   } else {
-    recordPitches.push({m: null, f: 0, t: performance.now()});
+    // 無音 or 低品質：窓もリセット（音の切れ目）
+    rawPitchWindow = [];
+    recordPitches.push({m: null, f: 0, t: performance.now(), q: q || 0});
     document.getElementById('pitchHz').textContent = ` (RMS ${rms.toFixed(3)} / 無音判定)`;
   }
   drawViz();
@@ -677,23 +719,77 @@ function drawViz(){
 }
 
 // ==================== セグメント化 & 判定 ====================
+// Step 3対策4: セグメント化の改善
+//  - 無音区切りを明示的に使用（pitches配列内の null を音の境界とする）
+//  - 立ち上がり/終端の不安定区間を除外
+//  - 最小セグメント長を 6 → 8 フレームに引き上げ
+//  - 中央寄り（前後20%除外）の中央値で代表ピッチを決定（ビブラート許容）
 function segmentNotes(pitches){
-  const valid = pitches.filter(p => p.m !== null).map(p => p.m);
-  if (valid.length < 5) return [];
-  const segs = [];
-  let cur = [valid[0]];
-  for (let i=1; i<valid.length; i++){
-    const recentMed = median(cur.slice(-5));
-    if (Math.abs(valid[i] - recentMed) < 0.8){
-      cur.push(valid[i]);
+  // pitches を「無音で区切られたグループ」に分割
+  const groups = [];
+  let cur = [];
+  for (const p of pitches){
+    if (p.m !== null) {
+      cur.push(p.m);
     } else {
-      if (cur.length >= 6) segs.push(median(cur));
-      cur = [valid[i]];
+      if (cur.length > 0) { groups.push(cur); cur = []; }
     }
   }
-  if (cur.length >= 6) segs.push(median(cur));
+  if (cur.length > 0) groups.push(cur);
+
+  const segs = [];
+  for (const g of groups){
+    // グループ内でさらに音程変化による分割
+    const subs = subSplit(g);
+    for (const s of subs){
+      if (s.length < 8) continue;  // 最小8フレーム（無音区切りで分かれた音）
+      // 立ち上がり/終端を除外（前後10%、最低2フレーム）
+      const trim = Math.max(2, Math.floor(s.length * 0.1));
+      const core = s.slice(trim, s.length - trim);
+      if (core.length < 5) continue;
+      // ビブラート許容：前後20%を除いた中央60%の中央値
+      const sortedCore = [...core].sort((a,b)=>a-b);
+      const lo = Math.floor(core.length * 0.2);
+      const hi = Math.ceil(core.length * 0.8);
+      const middle = sortedCore.slice(lo, hi);
+      segs.push(median(middle));
+    }
+  }
   return segs;
 }
+
+// グループ内のサブ分割（同じ無音グループ内で半音以上動いた場合のみ分割）
+function subSplit(arr){
+  if (arr.length === 0) return [];
+  const result = [];
+  let cur = [arr[0]];
+  let curMed = arr[0];
+  let outlierCount = 0;
+  for (let i=1; i<arr.length; i++){
+    // 直近5の中央値を基準
+    if (cur.length >= 5) curMed = median(cur.slice(-5));
+    const diff = Math.abs(arr[i] - curMed);
+    if (diff < 1.0){
+      // 同一音と判定（ヒステリシス 1.0 半音以内）
+      cur.push(arr[i]);
+      outlierCount = 0;
+    } else {
+      // 新しい音の可能性。連続3フレーム以上ズレが続いたら分割
+      outlierCount++;
+      cur.push(arr[i]);  // 一旦入れる
+      if (outlierCount >= 3){
+        // 直近3フレームを新しいセグメントへ
+        const tail = cur.splice(cur.length - 3, 3);
+        result.push(cur);
+        cur = tail;
+        outlierCount = 0;
+      }
+    }
+  }
+  if (cur.length > 0) result.push(cur);
+  return result;
+}
+
 function median(arr){
   const s = [...arr].sort((a,b)=>a-b);
   return s[Math.floor(s.length/2)];
@@ -821,7 +917,7 @@ function stopMicTest(){
 function testLoop(){
   if (!testRunning) return;
   analyser.getFloatTimeDomainData(pitchBuf);
-  const {f, rms, peak} = autoCorrelate(pitchBuf, audioCtx.sampleRate, 0.001);
+  const {f, rms, peak, q} = autoCorrelate(pitchBuf, audioCtx.sampleRate, 0.001);
   const pct = Math.min(100, rms*1000);
   document.getElementById('volBar').style.width = pct + '%';
   document.getElementById('sRms').textContent = rms.toFixed(4);
@@ -876,6 +972,7 @@ async function startTuning() {
   try {
     await startMic({ec:false, ns:false, agc:true});
     tuningRunning = true;
+    tuningPitchWindow = [];
     tuningLoop();
     log('チューニング開始');
   } catch(e) {
@@ -887,16 +984,25 @@ function stopTuning() {
   if (micStream) { micStream.getTracks().forEach(t => t.stop()); }
   log('チューニング停止');
 }
+// チューニングモード用の中央値窓
+let tuningPitchWindow = [];
 function tuningLoop() {
   if (!tuningRunning) return;
   analyser.getFloatTimeDomainData(pitchBuf);
-  const {f, rms} = autoCorrelate(pitchBuf, audioCtx.sampleRate, getRmsTh());
+  const {f, rms, q} = autoCorrelate(pitchBuf, audioCtx.sampleRate, getRmsTh());
   const now = performance.now();
   const tol = getTuningTol();
   const stableNeed = getTuningStableMs();
   let cents = null, inRange = false;
   if (f > 0) {
-    const midi = freqToMidi(f);
+    let midi = freqToMidi(f);
+    // チューニングでもスパイク除去：オクターブジャンプ抑制 + 軽い中央値スムージング
+    if (tuningPitchWindow.length >= 2){
+      midi = suppressOctaveJump(midi, tuningPitchWindow);
+    }
+    tuningPitchWindow.push(midi);
+    if (tuningPitchWindow.length > 3) tuningPitchWindow.shift();
+    midi = medianOf(tuningPitchWindow);
     cents = (midi - tuningTarget) * 100;
     inRange = Math.abs(cents) <= tol;
     document.getElementById('tnCurrent').textContent = midiToName(midi);
@@ -910,6 +1016,7 @@ function tuningLoop() {
     ind.style.left = leftPct + '%';
     ind.className = 'cents-bar-indicator ' + (inRange ? 'ok' : 'ng');
   } else {
+    tuningPitchWindow = [];
     document.getElementById('tnCurrent').textContent = '―';
     document.getElementById('tnCents').textContent = '―';
     document.getElementById('tnCents').className = 'tuning-cents';
