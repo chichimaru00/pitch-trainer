@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>🎵 音感トレーニング v2</title>
+<title>🎵 音感トレーニング v3</title>
 <style>
   :root { --primary:#007aff; --ok:#34c759; --ng:#ff3b30; --warn:#ff9500; --bg:#f5f5f7; }
   * { box-sizing: border-box; }
@@ -46,7 +46,6 @@
   .stat-val.ng { color:var(--ng); }
   #log { font-family:monospace; font-size:11px; background:#1c1c1e; color:#0f0; padding:8px;
          border-radius:6px; max-height:140px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; }
-
   /* ===== チューニングモード ===== */
   .tuning-note-selector {
     display: grid;
@@ -97,34 +96,117 @@
   }
   .cents-bar-indicator.ok { background: var(--ok); }
   .cents-bar-indicator.ng { background: var(--ng); }
-  /* キー選択 */
-  .key-selector {
+  /* キー選択（設定パネル内のセグメントコントロール） */
+  .key-segment {
     display: flex;
     gap: 6px;
-    margin: 8px 0 4px;
+    margin: 4px 0;
   }
-  .key-btn {
+  .key-seg-btn {
     flex: 1;
     min-width: 0;
-    padding: 10px 4px;
-    font-size: 14px;
+    padding: 8px 4px;
+    font-size: 13px;
     font-weight: bold;
     background: #e5e5ea;
     color: #1c1c1e;
     border-radius: 8px;
     margin: 0;
+    border: none;
+    cursor: pointer;
   }
-  .key-btn.active {
+  .key-seg-btn.active {
     background: var(--primary);
     color: white;
   }
-  .key-label {
-    font-size: 12px;
-    color: #666;
-    margin: 2px 0 6px;
+  .global-key-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #e5e5ea;
+    border-radius: 10px;
+    font-size: 11px;
+    color: #444;
+    margin-left: 6px;
+  }
+  /* ===== コード当てモード（簡易ピアノ） ===== */
+  .chord-display {
+    text-align: center; margin: 12px 0 8px;
+  }
+  .chord-target-name {
+    font-size: 32px; font-weight: bold; color: var(--primary);
+    min-height: 44px;
+  }
+  .chord-target-name.hidden-q { color: #999; }
+  .chord-selection-status {
+    font-size: 13px; color: #666; margin-top: 4px; min-height: 18px;
+  }
+  .piano-wrap {
+    position: relative;
+    width: 100%;
+    margin: 12px 0;
+    user-select: none;
+  }
+  .piano-white-row {
+    display: grid;
+    grid-template-columns: repeat(14, 1fr);
+    gap: 1px;
+    background: #888;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .pk-white {
+    background: #fff;
+    color: #444;
+    font-size: 10px;
+    font-weight: bold;
+    padding: 8px 0 4px;
+    height: 110px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    border: none;
+    margin: 0;
+    border-radius: 0;
+    min-width: 0;
+    cursor: pointer;
+  }
+  .pk-white:active { background: #d0e7ff; }
+  .pk-white.selected { background: #007aff; color: #fff; }
+  .pk-white.correct  { background: #34c759; color: #fff; }
+  .pk-white.wrong    { background: #ff3b30; color: #fff; }
+  .pk-white.target   { background: #ffe680; color: #444; }
+  .piano-black-row {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 70px;
+    pointer-events: none;
+  }
+  .pk-black {
+    position: absolute;
+    width: 5.5%;
+    height: 70px;
+    background: #222;
+    color: #ddd;
+    font-size: 9px;
+    border: none;
+    border-radius: 0 0 4px 4px;
+    pointer-events: auto;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+  }
+  .pk-black:active { background: #555; }
+  .pk-black.selected { background: #007aff; }
+  .pk-black.correct  { background: #34c759; }
+  .pk-black.wrong    { background: #ff3b30; }
+  .pk-black.target   { background: #b89000; color: #fff; }
+  .chord-result {
+    font-size: 14px; text-align: center; margin: 8px 0; min-height: 22px;
   }
 </style>
-
 <!-- ===== PWA 対応 ===== -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#007aff">
@@ -137,19 +219,18 @@
 <meta name="robots" content="noindex, nofollow">
 </head>
 <body>
-
-<h1>🎵 音感トレーニング v2</h1>
+<h1>🎵 音感トレーニング v3 <span class="global-key-badge" id="keyBadge">♀ 女性</span></h1>
 
 <div class="card mode-tabs">
-  <button id="modeA" class="active">A. 復唱</button>
-  <button id="modeB">B. 音当て</button>
-  <button id="modeC">C. 楽譜</button>
-  <button id="modeD">D. チューニング</button>
+  <button id="modeD" class="active">🎯 チューニング</button>
+  <button id="modeR">🎤 復唱</button>
+  <button id="modeC">📜 楽譜</button>
+  <button id="modeK">🎹 コード</button>
   <button id="modeT" class="warn">🔧 テスト</button>
 </div>
 
-<!-- ===== 通常モード ===== -->
-<div id="trainView">
+<!-- ===== 復唱・楽譜 共用ビュー ===== -->
+<div id="trainView" class="hidden">
   <div class="card">
     <div class="instr" id="instruction">スタートを押してください</div>
     <div class="note-display" id="display">—</div>
@@ -165,10 +246,15 @@
     </div>
     <div class="score" id="score">スコア: 0 / 0</div>
   </div>
-
   <div class="card">
-    <details>
+    <details open>
       <summary>⚙️ 設定</summary>
+      <label>🔑 キー（全モード共通）:
+        <div class="key-segment">
+          <button class="key-seg-btn" data-key="male">♂ 男性 (C3)</button>
+          <button class="key-seg-btn active" data-key="female">♀ 女性 (C4)</button>
+        </div>
+      </label>
       <label>難易度（音域）:
         <select id="difficulty">
           <option value="easy">易（ドレミファソ / 5音）</option>
@@ -176,7 +262,7 @@
           <option value="hard">難（半音含む全12音）</option>
         </select>
       </label>
-      <label>音数（A・Cモード）:
+      <label>音数（復唱・楽譜）:
         <select id="noteCount">
           <option value="2">2音</option>
           <option value="3" selected>3音</option>
@@ -187,7 +273,7 @@
       <label>判定の厳しさ: ±<span id="tolVal">50</span>セント
         <input type="range" id="tolerance" min="20" max="100" step="5" value="50">
       </label>
-      <label>判定モード（A・C）:
+      <label>判定モード（復唱・楽譜）:
         <select id="judgeMode">
           <option value="relative" selected>相対音感(インターバル一致)</option>
           <option value="absolute">絶対音感(音高そのまま)</option>
@@ -202,32 +288,23 @@
 </div>
 
 <!-- ===== チューニングモード ===== -->
-<div id="tuningView" class="hidden">
+<div id="tuningView">
   <div class="card">
     <h3 style="margin-top:0">🎯 単音チューニング</h3>
     <div class="small" style="margin-bottom:8px">
       練習したい音を選んで、その音を鼻歌で出してみてください。お手本が自動で1回鳴ります。
+      <br>キー設定は下の「⚙️ 設定」または各モード共通設定パネルから変更できます。
     </div>
-
-    <!-- キー選択 -->
-    <div class="key-selector" id="keySelector">
-      <button class="key-btn" data-key="male">♂ 男性 (C3)</button>
-      <button class="key-btn active" data-key="female">♀ 女性 (C4)</button>
-    </div>
-    <div class="key-label" id="keyLabel">現在のキー: 女性 (C4オクターブ)</div>
-
     <!-- 音階セレクタ -->
     <div class="tuning-note-selector" id="tuningNoteSel">
-      <button data-midi="60" class="tn-btn active">ド</button>
-      <button data-midi="62" class="tn-btn">レ</button>
-      <button data-midi="64" class="tn-btn">ミ</button>
-      <button data-midi="65" class="tn-btn">ファ</button>
-      <button data-midi="67" class="tn-btn">ソ</button>
-      <button data-midi="69" class="tn-btn">ラ</button>
-      <button data-midi="71" class="tn-btn">シ</button>
+      <button data-deg="0" class="tn-btn active">ド</button>
+      <button data-deg="1" class="tn-btn">レ</button>
+      <button data-deg="2" class="tn-btn">ミ</button>
+      <button data-deg="3" class="tn-btn">ファ</button>
+      <button data-deg="4" class="tn-btn">ソ</button>
+      <button data-deg="5" class="tn-btn">ラ</button>
+      <button data-deg="6" class="tn-btn">シ</button>
     </div>
-
-    <!-- 現在のターゲットと検出ピッチ -->
     <div class="tuning-display">
       <div class="tuning-target">
         目標: <span id="tnTargetName">ド</span>
@@ -236,8 +313,6 @@
       <div class="tuning-current" id="tnCurrent">―</div>
       <div class="tuning-cents" id="tnCents">―</div>
     </div>
-
-    <!-- セント誤差バー -->
     <div class="cents-bar-wrap">
       <div class="cents-scale">
         <span>-50¢</span><span>-25¢</span><span>0</span><span>+25¢</span><span>+50¢</span>
@@ -248,7 +323,6 @@
         <div class="cents-bar-center"></div>
       </div>
     </div>
-
     <div class="stat-row" style="margin-top:14px">
       <span class="stat-label">🎯 安定度（過去2秒）</span>
       <span class="stat-val" id="tnStability">0%</span>
@@ -257,15 +331,19 @@
       <span class="stat-label">✅ 合格カウント</span>
       <span class="stat-val" id="tnPassCount">0</span>
     </div>
-
     <div class="controls">
       <button id="tnStart">🎤 開始</button>
       <button id="tnStop" class="secondary">⏹ 停止</button>
       <button id="tnPlay" class="secondary">▶ お手本</button>
     </div>
-
     <details style="margin-top:10px">
       <summary>⚙️ チューニング設定</summary>
+      <label>🔑 キー（全モード共通）:
+        <div class="key-segment">
+          <button class="key-seg-btn" data-key="male">♂ 男性 (C3)</button>
+          <button class="key-seg-btn active" data-key="female">♀ 女性 (C4)</button>
+        </div>
+      </label>
       <label>合格判定: ±<span id="tnTolVal">20</span>セント
         <input type="range" id="tnTol" min="10" max="50" step="5" value="20">
       </label>
@@ -274,6 +352,49 @@
       </label>
       <label>
         <input type="checkbox" id="tnAutoNext"> 合格後に自動で次の音へ進む
+      </label>
+    </details>
+  </div>
+</div>
+
+<!-- ===== コード当てモード ===== -->
+<div id="chordView" class="hidden">
+  <div class="card">
+    <h3 style="margin-top:0">🎹 コード当て</h3>
+    <div class="small" style="margin-bottom:8px">
+      鳴っているコードを聴いて、構成音を鍵盤で全てタップしてください。鍵盤は1音ずつタップで試聴・選択できます。
+      <br>※ コード当ては聴音力の純粋測定のため、キー設定の影響を受けません（C4中心固定）。
+    </div>
+    <div class="chord-display">
+      <div class="chord-target-name hidden-q" id="chordTargetName">？</div>
+      <div class="chord-selection-status" id="chordStatus">お手本▶ を押してコードを聴いてください</div>
+    </div>
+    <!-- ピアノ鍵盤 -->
+    <div class="piano-wrap" id="pianoWrap">
+      <div class="piano-white-row" id="pianoWhiteRow"></div>
+      <div class="piano-black-row" id="pianoBlackRow"></div>
+    </div>
+    <div class="chord-result" id="chordResult"></div>
+    <div class="controls">
+      <button id="chordPlay">▶ お手本</button>
+      <button id="chordCheck">✅ 判定</button>
+      <button id="chordNext" class="secondary">次の問題 →</button>
+      <button id="chordClear" class="secondary">クリア</button>
+    </div>
+    <div class="score" id="chordScore">スコア: 0 / 0</div>
+    <details style="margin-top:10px">
+      <summary>⚙️ コード当て設定</summary>
+      <label>難易度:
+        <select id="chordLevel">
+          <option value="beginner" selected>入門（メジャー/マイナー三和音6種）</option>
+          <option value="basic">基礎（+ 7thコード）※将来実装</option>
+        </select>
+      </label>
+      <label>
+        <input type="checkbox" id="chordShowName"> 出題時にコード名を表示する（学習モード）
+      </label>
+      <label>
+        <input type="checkbox" id="chordArpeggio"> アルペジオで鳴らす（分解和音）
       </label>
     </details>
   </div>
@@ -320,17 +441,46 @@
     </details>
   </div>
 </div>
-
 <script>
 // ==================== 基本データ ====================
 const NOTE_NAMES_EN = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const NOTE_NAMES_JP = ['ド','ド#','レ','レ#','ミ','ファ','ファ#','ソ','ソ#','ラ','ラ#','シ'];
-// 高いド(C5=72)は表記上「ド」と区別できないため除外。C4オクターブのみ使用。
-const SCALE_EASY   = [60,62,64,65,67];                          // ドレミファソ
-const SCALE_NORMAL = [60,62,64,65,67,69,71];                    // ドレミファソラシ
-const SCALE_HARD   = [60,61,62,63,64,65,66,67,68,69,70,71];     // 半音含むC4オクターブ
+// 女性キー(C4)基準のスケール定義。男性は -12 オフセットで利用。
+const SCALE_EASY_BASE   = [60,62,64,65,67];                          // ドレミファソ
+const SCALE_NORMAL_BASE = [60,62,64,65,67,69,71];                    // ドレミファソラシ
+const SCALE_HARD_BASE   = [60,61,62,63,64,65,66,67,68,69,70,71];     // 半音含む
 
-let currentMode = 'A';
+// グローバルキー設定（全モード共通、ただしコード当てモードは影響を受けない）
+let userKey = 'female';   // 'male' or 'female'
+const KEY_OCTAVE_OFFSET = { male: -12, female: 0 };
+const KEY_LABELS = {
+  male:   '男性 (C3オクターブ)',
+  female: '女性 (C4オクターブ)'
+};
+const KEY_BADGE_LABELS = {
+  male:   '♂ 男性',
+  female: '♀ 女性'
+};
+
+// localStorageから前回のキー設定を復元
+try {
+  const savedKey = localStorage.getItem('pitch-trainer-key');
+  if (savedKey === 'male' || savedKey === 'female') {
+    userKey = savedKey;
+  }
+} catch(e) { /* localStorage非対応環境は無視 */ }
+
+function getKeyOffset(){ return KEY_OCTAVE_OFFSET[userKey]; }
+function getScale(diff){
+  const base = diff==='easy' ? SCALE_EASY_BASE
+             : diff==='normal' ? SCALE_NORMAL_BASE
+             : SCALE_HARD_BASE;
+  const off = getKeyOffset();
+  return base.map(m => m + off);
+}
+
+// 'D'=チューニング, 'R'=復唱, 'C'=楽譜, 'K'=コード当て, 'T'=テスト
+let currentMode = 'D';
 let currentTarget = [];
 let correct = 0, total = 0;
 
@@ -366,7 +516,7 @@ function midiToName(m, jp=true){
 function freqToMidi(f){ return 69 + 12 * Math.log2(f/440); }
 
 // ==================== お手本再生 ====================
-function playNote(midi, dur=0.5, delay=0){
+function playNote(midi, dur=0.5, delay=0, gain=0.25){
   ensureCtx();
   const o = audioCtx.createOscillator();
   const g = audioCtx.createGain();
@@ -374,8 +524,8 @@ function playNote(midi, dur=0.5, delay=0){
   o.frequency.value = midiToFreq(midi);
   const t0 = audioCtx.currentTime + delay;
   g.gain.setValueAtTime(0, t0);
-  g.gain.linearRampToValueAtTime(0.25, t0 + 0.02);
-  g.gain.linearRampToValueAtTime(0.20, t0 + dur - 0.05);
+  g.gain.linearRampToValueAtTime(gain, t0 + 0.02);
+  g.gain.linearRampToValueAtTime(gain*0.8, t0 + dur - 0.05);
   g.gain.linearRampToValueAtTime(0, t0 + dur);
   o.connect(g).connect(audioCtx.destination);
   o.start(t0);
@@ -383,6 +533,14 @@ function playNote(midi, dur=0.5, delay=0){
 }
 function playMelody(notes){
   notes.forEach((n,i) => playNote(n, 0.45, i*0.55));
+}
+function playChord(notes, arpeggio=false){
+  if (arpeggio){
+    notes.forEach((n,i) => playNote(n, 1.2 - i*0.15, i*0.18, 0.18));
+  } else {
+    // 同時発音（音量は1音あたり下げる）
+    notes.forEach(n => playNote(n, 1.2, 0, 0.14));
+  }
 }
 
 // ==================== マイク ====================
@@ -488,15 +646,17 @@ const canvas = document.getElementById('viz');
 const ctx2 = canvas.getContext('2d');
 function drawViz(){
   ctx2.clearRect(0,0,canvas.width,canvas.height);
+  // キーに応じて描画範囲をシフト
+  const baseMid = userKey === 'male' ? 55 : 67;
   ctx2.strokeStyle = '#e5e5ea';
-  for (let m=55; m<=80; m+=5){
-    const y = canvas.height - ((m-55)/25)*canvas.height;
+  for (let m=baseMid-12; m<=baseMid+12; m+=5){
+    const y = canvas.height - ((m-(baseMid-12))/24)*canvas.height;
     ctx2.beginPath(); ctx2.moveTo(0,y); ctx2.lineTo(canvas.width,y); ctx2.stroke();
   }
   ctx2.strokeStyle = '#34c759';
   ctx2.setLineDash([4,4]);
   currentTarget.forEach(m => {
-    const y = canvas.height - ((m-55)/25)*canvas.height;
+    const y = canvas.height - ((m-(baseMid-12))/24)*canvas.height;
     ctx2.beginPath(); ctx2.moveTo(0,y); ctx2.lineTo(canvas.width,y); ctx2.stroke();
   });
   ctx2.setLineDash([]);
@@ -508,7 +668,7 @@ function drawViz(){
   data.forEach((p,i) => {
     if (p.m === null) { started = false; return; }
     const x = i*(canvas.width/300);
-    const y = canvas.height - ((p.m-55)/25)*canvas.height;
+    const y = canvas.height - ((p.m-(baseMid-12))/24)*canvas.height;
     if (!started){ ctx2.moveTo(x,y); started = true; }
     else ctx2.lineTo(x,y);
   });
@@ -553,7 +713,8 @@ function judge(){
     ok = false;
     detail = `音数が違います（検出${segs.length}音 / 正解${currentTarget.length}音）`;
   } else {
-    const useRelative = (currentMode === 'A') || (currentMode === 'C' && judgeMode === 'relative');
+    // 復唱('R')と楽譜('C')は、設定で relative/absolute を切り替え
+    const useRelative = (judgeMode === 'relative');
     const offset = useRelative ? (segs[0] - currentTarget[0]) : 0;
     const errs = [];
     for (let i=0; i<segs.length; i++){
@@ -573,12 +734,11 @@ function judge(){
        <div class="small">あなた: ${detected || '―'}<br>正解: ${target}</div>`;
 }
 
-// ==================== 出題 ====================
+// ==================== 出題（復唱・楽譜共通） ====================
 function genQuestion(){
   const diff = document.getElementById('difficulty').value;
-  const scale = diff==='easy' ? SCALE_EASY : diff==='normal' ? SCALE_NORMAL : SCALE_HARD;
-  const baseCount = parseInt(document.getElementById('noteCount').value);
-  const len = currentMode === 'B' ? Math.min(2, baseCount) : baseCount;
+  const scale = getScale(diff);
+  const len = parseInt(document.getElementById('noteCount').value);
   const arr = [];
   let last = -1;
   for (let i=0; i<len; i++){
@@ -589,15 +749,16 @@ function genQuestion(){
   }
   currentTarget = arr;
   if (currentMode === 'C'){
+    // 楽譜モード：音名を表示
     document.getElementById('display').innerHTML =
       currentTarget.map(m => `<span style="color:#007aff">${midiToName(m)}</span>`).join(' ');
   } else {
     document.getElementById('display').textContent = '？';
   }
   document.getElementById('instruction').textContent =
-    currentMode === 'A' ? '▶ お手本→🎤 で同じメロディを鼻歌で再現' :
-    currentMode === 'B' ? '▶ お手本→🎤 で「同じ高さ」を鼻歌で（絶対）' :
-                         '上の音名を🎤 で鼻歌で歌ってください';
+    currentMode === 'R' ? '▶ お手本→🎤 で同じメロディを鼻歌で再現' :
+    currentMode === 'C' ? '上の音名を🎤 で鼻歌で歌ってください' :
+                         '';
   recordPitches = [];
   drawViz();
 }
@@ -606,7 +767,6 @@ function genQuestion(){
 let testRunning = false;
 const testCanvas = document.getElementById('testViz');
 const tctx = testCanvas.getContext('2d');
-
 async function checkPermission(){
   try {
     if (navigator.permissions){
@@ -685,67 +845,26 @@ function testLoop(){
 
 // ==================== チューニングモード ====================
 let tuningRunning = false;
-let tuningKey = 'female';   // 'male' or 'female'
-let tuningTarget = 60;      // 現在の目標MIDIノート（キーに応じて変動）
+let tuningTargetDeg = 0;    // スケール内の度数（0=ド〜6=シ）
+let tuningTarget = 60;      // 実際のMIDIノート（キー反映後）
 let tuningHistory = [];
 let tuningStableStart = null;
 let tuningPassCount = 0;
 const TUNING_WINDOW_MS = 2000;
-
-// キーごとの音階定義
-const TUNING_NOTES = {
-  male:   [48, 50, 52, 53, 55, 57, 59],  // C3-B3 (130.8Hz〜246.9Hz)
-  female: [60, 62, 64, 65, 67, 69, 71]   // C4-B4 (261.6Hz〜493.9Hz)
-};
-const KEY_LABELS = {
-  male:   '男性 (C3オクターブ)',
-  female: '女性 (C4オクターブ)'
-};
-
-// localStorageから前回のキー設定を復元
-try {
-  const savedKey = localStorage.getItem('pitch-trainer-key');
-  if (savedKey === 'male' || savedKey === 'female') {
-    tuningKey = savedKey;
-  }
-} catch(e) { /* localStorage非対応環境は無視 */ }
-
 function getTuningTol() {
   return parseInt(document.getElementById('tnTol').value);
 }
 function getTuningStableMs() {
   return parseInt(document.getElementById('tnStableMs').value);
 }
-
-function setTuningKey(key) {
-  if (key !== 'male' && key !== 'female') return;
-  tuningKey = key;
-  const notes = TUNING_NOTES[key];
-  // 7音ボタンの data-midi を書き換え、passedクリア
-  document.querySelectorAll('.tn-btn').forEach((b, i) => {
-    b.dataset.midi = notes[i];
-    b.classList.remove('passed');
-  });
-  // キー選択ボタンのactive表示
-  document.querySelectorAll('.key-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.key === key);
-  });
-  document.getElementById('keyLabel').textContent = '現在のキー: ' + KEY_LABELS[key];
-  // 保存
-  try { localStorage.setItem('pitch-trainer-key', key); } catch(e) {}
-  // 合格カウントもリセット（キー変えたら仕切り直し）
-  tuningPassCount = 0;
-  document.getElementById('tnPassCount').textContent = '0';
-  // ターゲットをそのキーの「ド」にセット
-  setTuningTarget(notes[0]);
-  log('キー切替: ' + key);
-}
-
-function setTuningTarget(midi) {
+function setTuningTargetDeg(deg){
+  tuningTargetDeg = deg;
+  const midi = SCALE_NORMAL_BASE[deg] + getKeyOffset();
   tuningTarget = midi;
   document.querySelectorAll('.tn-btn').forEach(b => {
-    b.classList.toggle('active', parseInt(b.dataset.midi) === midi);
-    if (parseInt(b.dataset.midi) === midi) b.classList.remove('passed');
+    const d = parseInt(b.dataset.deg);
+    b.classList.toggle('active', d === deg);
+    if (d === deg) b.classList.remove('passed');
   });
   document.getElementById('tnTargetName').textContent = midiToName(midi);
   document.getElementById('tnTargetHz').textContent = `(${midiToFreq(midi).toFixed(1)} Hz)`;
@@ -753,7 +872,6 @@ function setTuningTarget(midi) {
   tuningStableStart = null;
   playNote(midi, 1.0);
 }
-
 async function startTuning() {
   try {
     await startMic({ec:false, ns:false, agc:true});
@@ -769,7 +887,6 @@ function stopTuning() {
   if (micStream) { micStream.getTracks().forEach(t => t.stop()); }
   log('チューニング停止');
 }
-
 function tuningLoop() {
   if (!tuningRunning) return;
   analyser.getFloatTimeDomainData(pitchBuf);
@@ -777,19 +894,16 @@ function tuningLoop() {
   const now = performance.now();
   const tol = getTuningTol();
   const stableNeed = getTuningStableMs();
-
   let cents = null, inRange = false;
   if (f > 0) {
     const midi = freqToMidi(f);
     cents = (midi - tuningTarget) * 100;
     inRange = Math.abs(cents) <= tol;
-
     document.getElementById('tnCurrent').textContent = midiToName(midi);
     const sign = cents >= 0 ? '+' : '';
     const centsEl = document.getElementById('tnCents');
     centsEl.textContent = `${sign}${cents.toFixed(0)}¢`;
     centsEl.className = 'tuning-cents ' + (inRange ? 'ok' : 'ng');
-
     const clipped = Math.max(-50, Math.min(50, cents));
     const leftPct = 50 + clipped;
     const ind = document.getElementById('centsIndicator');
@@ -800,14 +914,12 @@ function tuningLoop() {
     document.getElementById('tnCents').textContent = '―';
     document.getElementById('tnCents').className = 'tuning-cents';
   }
-
   tuningHistory.push({t: now, inRange});
   tuningHistory = tuningHistory.filter(h => now - h.t <= TUNING_WINDOW_MS);
   const inCount = tuningHistory.filter(h => h.inRange).length;
   const stability = tuningHistory.length > 0
     ? Math.round(100 * inCount / tuningHistory.length) : 0;
   document.getElementById('tnStability').textContent = stability + '%';
-
   if (inRange) {
     if (tuningStableStart === null) tuningStableStart = now;
     const stableElapsed = now - tuningStableStart;
@@ -818,23 +930,235 @@ function tuningLoop() {
   } else {
     tuningStableStart = null;
   }
-
   requestAnimationFrame(tuningLoop);
 }
-
 function onTuningPass() {
   tuningPassCount++;
   document.getElementById('tnPassCount').textContent = tuningPassCount;
   document.querySelectorAll('.tn-btn').forEach(b => {
-    if (parseInt(b.dataset.midi) === tuningTarget) b.classList.add('passed');
+    if (parseInt(b.dataset.deg) === tuningTargetDeg) b.classList.add('passed');
   });
   log(`✅ ${midiToName(tuningTarget)} 合格 (累計${tuningPassCount})`);
-
   if (document.getElementById('tnAutoNext').checked) {
-    const targets = TUNING_NOTES[tuningKey];
-    const idx = targets.indexOf(tuningTarget);
-    const next = targets[(idx + 1) % targets.length];
-    setTimeout(() => setTuningTarget(next), 600);
+    const next = (tuningTargetDeg + 1) % 7;
+    setTimeout(() => setTuningTargetDeg(next), 600);
+  }
+}
+
+// ==================== グローバルキー設定（全モード反映） ====================
+function setUserKey(key){
+  if (key !== 'male' && key !== 'female') return;
+  userKey = key;
+  try { localStorage.setItem('pitch-trainer-key', key); } catch(e) {}
+  // バッジ更新
+  document.getElementById('keyBadge').textContent = KEY_BADGE_LABELS[key];
+  // 設定パネル内のセグメントボタン同期（複数箇所にあるため全て更新）
+  document.querySelectorAll('.key-seg-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.key === key);
+  });
+  log('キー切替: ' + key + ' (' + KEY_LABELS[key] + ')');
+  // 各モードに反映
+  if (currentMode === 'D') {
+    // チューニング：同じ度数（ド/レ/…）のまま新キーで鳴らし直す
+    tuningPassCount = 0;
+    document.getElementById('tnPassCount').textContent = '0';
+    document.querySelectorAll('.tn-btn').forEach(b => b.classList.remove('passed'));
+    setTuningTargetDeg(tuningTargetDeg);
+  } else if (currentMode === 'R' || currentMode === 'C') {
+    // 復唱・楽譜：次の出題から反映するが、即時にもリフレッシュ
+    genQuestion();
+  }
+  // コード当て(K)はキー設定の影響なし
+}
+
+// ==================== コード当てモード ====================
+// コードは度数（C4ベース）の相対値で定義
+const CHORD_DEFS_BEGINNER = [
+  {name:'C',  notes:[60, 64, 67]},   // ド・ミ・ソ
+  {name:'Dm', notes:[62, 65, 69]},   // レ・ファ・ラ
+  {name:'Em', notes:[64, 67, 71]},   // ミ・ソ・シ
+  {name:'F',  notes:[65, 69, 72]},   // ファ・ラ・ド
+  {name:'G',  notes:[67, 71, 74]},   // ソ・シ・レ
+  {name:'Am', notes:[69, 72, 76]},   // ラ・ド・ミ
+];
+// 鍵盤は C4(60) 〜 E5(76) を表示
+const PIANO_MIN_MIDI = 60;
+const PIANO_MAX_MIDI = 76;
+let currentChord = null;       // {name, notes:[..]}
+let chordSelected = new Set(); // 選択済みMIDI
+let chordCorrect = 0, chordTotal = 0;
+let chordResultShown = false;
+
+function buildPiano(){
+  const whiteRow = document.getElementById('pianoWhiteRow');
+  const blackRow = document.getElementById('pianoBlackRow');
+  whiteRow.innerHTML = '';
+  blackRow.innerHTML = '';
+  // 白鍵: C4(60), D4(62), E4(64), F4(65), G4(67), A4(69), B4(71),
+  //       C5(72), D5(74), E5(76)  → 10音
+  // ※ 14列gridだが10鍵のみ。残り4列はスペーサー → 11音用に変更し、シ#=ド扱い
+  // 簡易化: C4〜E5 の白鍵だけ表示 = 10鍵
+  const whites = [];
+  for (let m=PIANO_MIN_MIDI; m<=PIANO_MAX_MIDI; m++){
+    const pc = ((m%12)+12)%12;
+    if ([0,2,4,5,7,9,11].includes(pc)) whites.push(m);
+  }
+  // grid-template-columns を白鍵数に合わせる
+  whiteRow.style.gridTemplateColumns = `repeat(${whites.length}, 1fr)`;
+  whites.forEach(m => {
+    const b = document.createElement('button');
+    b.className = 'pk-white';
+    b.dataset.midi = m;
+    const oct = Math.floor(m/12) - 1;
+    b.innerHTML = `<span>${midiToName(m)}</span><span style="font-size:9px;color:#888">${oct}</span>`;
+    b.onclick = () => onPianoKeyClick(m, b);
+    whiteRow.appendChild(b);
+  });
+  // 黒鍵：C4-E5の範囲。黒鍵の位置（白鍵に対する%）を計算
+  // 白鍵幅 = 100/whites.length %
+  const wWidth = 100 / whites.length;
+  const blacks = [];
+  for (let m=PIANO_MIN_MIDI; m<=PIANO_MAX_MIDI; m++){
+    const pc = ((m%12)+12)%12;
+    if ([1,3,6,8,10].includes(pc)) blacks.push(m);
+  }
+  blacks.forEach(m => {
+    // この黒鍵の左隣の白鍵を探す
+    const leftWhite = m - 1;
+    const idx = whites.indexOf(leftWhite);
+    if (idx < 0) return;
+    const left = (idx + 1) * wWidth - 2.75; // 中央寄せ
+    const b = document.createElement('button');
+    b.className = 'pk-black';
+    b.dataset.midi = m;
+    b.style.left = left + '%';
+    b.title = midiToName(m, false);
+    b.onclick = (e) => { e.stopPropagation(); onPianoKeyClick(m, b); };
+    blackRow.appendChild(b);
+  });
+}
+function onPianoKeyClick(midi, btnEl){
+  // クリック時に音を鳴らす
+  playNote(midi, 0.5, 0, 0.18);
+  if (chordResultShown){
+    // 判定後は次の問題に進むまで選択不可
+    return;
+  }
+  if (chordSelected.has(midi)){
+    chordSelected.delete(midi);
+    btnEl.classList.remove('selected');
+  } else {
+    chordSelected.add(midi);
+    btnEl.classList.add('selected');
+  }
+  updateChordStatus();
+}
+function updateChordStatus(){
+  const need = currentChord ? currentChord.notes.length : 3;
+  const got  = chordSelected.size;
+  const arr  = [...chordSelected].sort((a,b)=>a-b).map(m => midiToName(m)).join(' ');
+  document.getElementById('chordStatus').textContent =
+    `選択中: ${got}/${need}音` + (arr ? `（${arr}）` : '');
+}
+function genChordQuestion(){
+  const level = document.getElementById('chordLevel').value;
+  const pool = CHORD_DEFS_BEGINNER; // 将来 basic 対応
+  currentChord = pool[Math.floor(Math.random()*pool.length)];
+  chordSelected.clear();
+  chordResultShown = false;
+  // 鍵盤の表示状態リセット
+  document.querySelectorAll('.pk-white, .pk-black').forEach(b => {
+    b.classList.remove('selected','correct','wrong','target');
+  });
+  document.getElementById('chordResult').textContent = '';
+  // コード名表示
+  const nameEl = document.getElementById('chordTargetName');
+  if (document.getElementById('chordShowName').checked){
+    nameEl.textContent = currentChord.name;
+    nameEl.classList.remove('hidden-q');
+  } else {
+    nameEl.textContent = '？';
+    nameEl.classList.add('hidden-q');
+  }
+  document.getElementById('chordStatus').textContent = 'お手本▶ を押してコードを聴いてください';
+}
+function playCurrentChord(){
+  if (!currentChord) return;
+  const arp = document.getElementById('chordArpeggio').checked;
+  playChord(currentChord.notes, arp);
+}
+function checkChord(){
+  if (!currentChord || chordResultShown) return;
+  chordTotal++;
+  const target = new Set(currentChord.notes);
+  const sel = chordSelected;
+  let ok = (target.size === sel.size);
+  if (ok){
+    for (const m of target){ if (!sel.has(m)) { ok = false; break; } }
+  }
+  if (ok) chordCorrect++;
+  document.getElementById('chordScore').textContent = `スコア: ${chordCorrect} / ${chordTotal}`;
+  // 鍵盤の判定表示
+  document.querySelectorAll('.pk-white, .pk-black').forEach(b => {
+    const m = parseInt(b.dataset.midi);
+    const isTarget = target.has(m);
+    const isSel = sel.has(m);
+    if (isTarget && isSel){
+      b.classList.remove('selected'); b.classList.add('correct');
+    } else if (isTarget && !isSel){
+      b.classList.add('target');
+    } else if (!isTarget && isSel){
+      b.classList.remove('selected'); b.classList.add('wrong');
+    }
+  });
+  // コード名を必ず表示
+  document.getElementById('chordTargetName').textContent = currentChord.name;
+  document.getElementById('chordTargetName').classList.remove('hidden-q');
+  document.getElementById('chordResult').innerHTML = ok
+    ? `<span class="result-correct">⭕ 正解！ ${currentChord.name}（${currentChord.notes.map(m=>midiToName(m)).join('・')}）</span>`
+    : `<span class="result-wrong">❌ 残念…正解は ${currentChord.name}（${currentChord.notes.map(m=>midiToName(m)).join('・')}）</span>`;
+  chordResultShown = true;
+}
+function clearChordSelection(){
+  if (chordResultShown) return;
+  chordSelected.clear();
+  document.querySelectorAll('.pk-white, .pk-black').forEach(b => {
+    b.classList.remove('selected');
+  });
+  updateChordStatus();
+}
+
+// ==================== モード切替 ====================
+function switchMode(m){
+  document.querySelectorAll('.mode-tabs button').forEach(x => x.classList.remove('active'));
+  document.getElementById('mode' + m).classList.add('active');
+  // 全ビュー hidden
+  document.getElementById('trainView').classList.add('hidden');
+  document.getElementById('tuningView').classList.add('hidden');
+  document.getElementById('chordView').classList.add('hidden');
+  document.getElementById('testView').classList.add('hidden');
+  // 既存マイクストリームを停止
+  if (currentMode === 'D' && tuningRunning) stopTuning();
+  if (currentMode === 'T' && testRunning) stopMicTest();
+  if (recording) { recording = false; }
+
+  if (m === 'T'){
+    document.getElementById('testView').classList.remove('hidden');
+    currentMode = 'T';
+    checkPermission();
+  } else if (m === 'D'){
+    document.getElementById('tuningView').classList.remove('hidden');
+    currentMode = 'D';
+    setTuningTargetDeg(0);
+  } else if (m === 'K'){
+    document.getElementById('chordView').classList.remove('hidden');
+    currentMode = 'K';
+    genChordQuestion();
+  } else {
+    // R or C
+    document.getElementById('trainView').classList.remove('hidden');
+    currentMode = m;
+    genQuestion();
   }
 }
 
@@ -857,39 +1181,18 @@ document.getElementById('next').onclick = () => {
   document.getElementById('display').textContent = '—';
   genQuestion();
 };
-
 document.querySelectorAll('.mode-tabs button').forEach(b => {
   b.onclick = () => {
-    document.querySelectorAll('.mode-tabs button').forEach(x => x.classList.remove('active'));
-    b.classList.add('active');
     const m = b.id.replace('mode','');
-    document.getElementById('trainView').classList.add('hidden');
-    document.getElementById('tuningView').classList.add('hidden');
-    document.getElementById('testView').classList.add('hidden');
-    if (currentMode === 'D' && tuningRunning) stopTuning();
-    if (currentMode === 'T' && testRunning) stopMicTest();
-    if (recording) { recording = false; }
-
-    if (m === 'T'){
-      document.getElementById('testView').classList.remove('hidden');
-      currentMode = 'T';
-      checkPermission();
-    } else if (m === 'D'){
-      document.getElementById('tuningView').classList.remove('hidden');
-      currentMode = 'D';
-      setTuningKey(tuningKey);  // 保存されたキーで初期化（内部でsetTuningTargetも呼ばれる）
-    } else {
-      document.getElementById('trainView').classList.remove('hidden');
-      currentMode = m;
-      genQuestion();
-    }
+    switchMode(m);
   };
 });
-
 document.getElementById('tolerance').oninput = e => document.getElementById('tolVal').textContent = e.target.value;
 document.getElementById('rmsTh').oninput   = e => document.getElementById('rmsThVal').textContent = (e.target.value/1000).toFixed(3);
 ['difficulty','noteCount','judgeMode'].forEach(id => {
-  document.getElementById(id).onchange = genQuestion;
+  document.getElementById(id).onchange = () => {
+    if (currentMode === 'R' || currentMode === 'C') genQuestion();
+  };
 });
 
 document.getElementById('micStart').onclick = startMicTest;
@@ -898,10 +1201,7 @@ document.getElementById('beepTest').onclick = () => playNote(69, 1.0);
 
 // チューニングモードのイベント
 document.querySelectorAll('.tn-btn').forEach(b => {
-  b.onclick = () => setTuningTarget(parseInt(b.dataset.midi));
-});
-document.querySelectorAll('.key-btn').forEach(b => {
-  b.onclick = () => setTuningKey(b.dataset.key);
+  b.onclick = () => setTuningTargetDeg(parseInt(b.dataset.deg));
 });
 document.getElementById('tnStart').onclick = startTuning;
 document.getElementById('tnStop').onclick = stopTuning;
@@ -911,9 +1211,41 @@ document.getElementById('tnTol').oninput = e =>
 document.getElementById('tnStableMs').oninput = e =>
   document.getElementById('tnStableVal').textContent = (e.target.value/1000).toFixed(1);
 
-genQuestion();
-</script>
+// グローバルキーセグメントボタン（複数箇所にある）
+document.querySelectorAll('.key-seg-btn').forEach(b => {
+  b.onclick = () => setUserKey(b.dataset.key);
+});
 
+// コード当てモードのイベント
+document.getElementById('chordPlay').onclick = playCurrentChord;
+document.getElementById('chordCheck').onclick = checkChord;
+document.getElementById('chordNext').onclick = genChordQuestion;
+document.getElementById('chordClear').onclick = clearChordSelection;
+document.getElementById('chordLevel').onchange = genChordQuestion;
+document.getElementById('chordShowName').onchange = () => {
+  if (!currentChord) return;
+  const nameEl = document.getElementById('chordTargetName');
+  if (document.getElementById('chordShowName').checked && !chordResultShown){
+    nameEl.textContent = currentChord.name;
+    nameEl.classList.remove('hidden-q');
+  } else if (!chordResultShown){
+    nameEl.textContent = '？';
+    nameEl.classList.add('hidden-q');
+  }
+};
+
+// ==================== 初期化 ====================
+// バッジ初期表示
+document.getElementById('keyBadge').textContent = KEY_BADGE_LABELS[userKey];
+// キーセグメントボタンの初期active同期
+document.querySelectorAll('.key-seg-btn').forEach(b => {
+  b.classList.toggle('active', b.dataset.key === userKey);
+});
+// 鍵盤を構築
+buildPiano();
+// 初期モードはチューニング
+switchMode('D');
+</script>
 <!-- ===== Service Worker 登録 ===== -->
 <script>
 if ('serviceWorker' in navigator) {
