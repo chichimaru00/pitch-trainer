@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>🎵 音感トレーニング v3.1</title>
+<title>🎵 音感トレーニング v3.2</title>
 <style>
   :root { --primary:#007aff; --ok:#34c759; --ng:#ff3b30; --warn:#ff9500; --bg:#f5f5f7; }
   * { box-sizing: border-box; }
@@ -157,10 +157,10 @@
   .pk-white {
     background: #fff;
     color: #444;
-    font-size: 10px;
+    font-size: 9px;
     font-weight: bold;
-    padding: 8px 0 4px;
-    height: 110px;
+    padding: 6px 0 3px;
+    height: 100px;
     text-align: center;
     display: flex;
     flex-direction: column;
@@ -185,18 +185,32 @@
   }
   .pk-black {
     position: absolute;
-    width: 5.5%;
-    height: 70px;
+    width: 4.5%;
+    height: 62px;
     background: #222;
     color: #ddd;
-    font-size: 9px;
+    font-size: 8px;
     border: none;
-    border-radius: 0 0 4px 4px;
+    border-radius: 0 0 3px 3px;
     pointer-events: auto;
     cursor: pointer;
     padding: 0;
     margin: 0;
     min-width: 0;
+  }
+  .pk-white.explore-highlight {
+    background: linear-gradient(180deg, #fff 60%, #ffb74d 100%);
+    color: #444;
+  }
+  .pk-black.explore-highlight {
+    background: linear-gradient(180deg, #444 60%, #ff9500 100%);
+  }
+  .pk-white.explore-root {
+    background: linear-gradient(180deg, #fff 50%, #ff6f00 100%);
+    color: #fff;
+  }
+  .pk-black.explore-root {
+    background: linear-gradient(180deg, #444 50%, #d84315 100%);
   }
   .pk-black:active { background: #555; }
   .pk-black.selected { background: #007aff; }
@@ -206,6 +220,44 @@
   .chord-result {
     font-size: 14px; text-align: center; margin: 8px 0; min-height: 22px;
   }
+  /* サブタブ */
+  .sub-tab-btn {
+    flex: 1; min-width: 0;
+    background: #e5e5ea; color: #1c1c1e;
+    font-size: 13px; padding: 10px 4px;
+  }
+  .sub-tab-btn.active { background: var(--primary); color: white; }
+  /* コード探索：ルート・タイプセレクタ */
+  .chord-root-selector {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 2px;
+    margin: 4px 0 6px;
+  }
+  .chord-root-btn {
+    min-width: 0; padding: 8px 0;
+    font-size: 11px; font-weight: bold;
+    background: #e5e5ea; color: #1c1c1e;
+    border-radius: 6px; margin: 0;
+    border: none; cursor: pointer;
+  }
+  .chord-root-btn.active { background: var(--primary); color: white; }
+  .chord-root-btn.sharp { background: #c8c8d0; }
+  .chord-root-btn.sharp.active { background: var(--primary); }
+  .chord-type-selector {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    margin: 4px 0;
+  }
+  .chord-type-btn {
+    min-width: 0; padding: 10px 2px;
+    font-size: 12px; font-weight: bold;
+    background: #e5e5ea; color: #1c1c1e;
+    border-radius: 8px; margin: 0;
+    border: none; cursor: pointer;
+  }
+  .chord-type-btn.active { background: var(--primary); color: white; }
 </style>
 <!-- ===== PWA 対応 ===== -->
 <link rel="manifest" href="manifest.json">
@@ -219,7 +271,7 @@
 <meta name="robots" content="noindex, nofollow">
 </head>
 <body>
-<h1>🎵 音感トレーニング v3.1 <span class="global-key-badge" id="keyBadge">♀ 女性</span></h1>
+<h1>🎵 音感トレーニング v3.2 <span class="global-key-badge" id="keyBadge">♀ 女性</span></h1>
 
 <div class="card mode-tabs">
   <button id="modeD" class="active">🎯 チューニング</button>
@@ -281,6 +333,9 @@
       </label>
       <label>無音判定しきい値 (RMS): <span id="rmsThVal">0.005</span>
         <input type="range" id="rmsTh" min="1" max="50" step="1" value="5">
+      </label>
+      <label>
+        <input type="checkbox" id="autoPlayOnNext" checked> 次の問題で自動的にお手本を再生する（復唱モード）
       </label>
       <div class="small">※ うまく拾えない場合は「🔧 テスト」で動作確認してください。</div>
     </details>
@@ -357,19 +412,57 @@
   </div>
 </div>
 
-<!-- ===== コード当てモード ===== -->
+<!-- ===== コードモード（サブタブ：探索 / 当て） ===== -->
 <div id="chordView" class="hidden">
-  <div class="card">
-    <h3 style="margin-top:0">🎹 コード当て</h3>
+  <!-- サブタブ -->
+  <div class="card mode-tabs" style="margin-bottom:8px">
+    <button id="subExplore" class="sub-tab-btn active">🔍 探索</button>
+    <button id="subQuiz" class="sub-tab-btn">🎯 当て</button>
+  </div>
+
+  <!-- ===== サブタブ 1: コード探索 ===== -->
+  <div id="chordExploreView" class="card">
+    <h3 style="margin-top:0">🔍 コード探索</h3>
+    <div class="small" style="margin-bottom:8px">
+      キーとコードタイプを選んで、響きを聴き比べてみましょう。鍵盤に構成音がハイライト表示されます。
+    </div>
+    <!-- ルート選択 -->
+    <label class="small" style="display:block;margin-top:6px">ルート音:</label>
+    <div class="chord-root-selector" id="exploreRootSel"></div>
+    <!-- コードタイプ選択 -->
+    <label class="small" style="display:block;margin-top:10px">コードタイプ:</label>
+    <div class="chord-type-selector" id="exploreTypeSel"></div>
+    <!-- 現在のコード表示 -->
+    <div class="chord-display">
+      <div class="chord-target-name" id="exploreName">C</div>
+      <div class="chord-selection-status" id="exploreNotes">ド・ミ・ソ</div>
+    </div>
+    <!-- ピアノ鍵盤（探索用） -->
+    <div class="piano-wrap" id="explorePianoWrap">
+      <div class="piano-white-row" id="explorePianoWhiteRow"></div>
+      <div class="piano-black-row" id="explorePianoBlackRow"></div>
+    </div>
+    <div class="controls">
+      <button id="explorePlay">▶ 再生</button>
+      <button id="exploreArp" class="secondary">▶ アルペジオ</button>
+    </div>
+    <div class="small" style="margin-top:8px;color:#666">
+      💡 鍵盤の各音は個別にタップして試聴できます。
+    </div>
+  </div>
+
+  <!-- ===== サブタブ 2: コード当て ===== -->
+  <div id="chordQuizView" class="card hidden">
+    <h3 style="margin-top:0">🎯 コード当て</h3>
     <div class="small" style="margin-bottom:8px">
       鳴っているコードを聴いて、構成音を鍵盤で全てタップしてください。鍵盤は1音ずつタップで試聴・選択できます。
-      <br>※ コード当ては聴音力の純粋測定のため、キー設定の影響を受けません（C4中心固定）。
+      <br>※ 聴音力の純粋測定のため、キー設定の影響を受けません（C4中心固定）。
     </div>
     <div class="chord-display">
       <div class="chord-target-name hidden-q" id="chordTargetName">？</div>
       <div class="chord-selection-status" id="chordStatus">お手本▶ を押してコードを聴いてください</div>
     </div>
-    <!-- ピアノ鍵盤 -->
+    <!-- ピアノ鍵盤（クイズ用） -->
     <div class="piano-wrap" id="pianoWrap">
       <div class="piano-white-row" id="pianoWhiteRow"></div>
       <div class="piano-black-row" id="pianoBlackRow"></div>
@@ -384,10 +477,11 @@
     <div class="score" id="chordScore">スコア: 0 / 0</div>
     <details style="margin-top:10px">
       <summary>⚙️ コード当て設定</summary>
-      <label>難易度:
+      <label>出題範囲:
         <select id="chordLevel">
-          <option value="beginner" selected>入門（メジャー/マイナー三和音6種）</option>
-          <option value="basic">基礎（+ 7thコード）※将来実装</option>
+          <option value="beginner" selected>入門（ダイアトニック三和音 7種）</option>
+          <option value="seventh">基礎（+ 7thコード）</option>
+          <option value="extended">応用（sus4 / add9 / dim / aug 含む）</option>
         </select>
       </label>
       <label>
@@ -395,6 +489,9 @@
       </label>
       <label>
         <input type="checkbox" id="chordArpeggio"> アルペジオで鳴らす（分解和音）
+      </label>
+      <label>
+        <input type="checkbox" id="chordAutoPlay" checked> 次の問題で自動的にお手本を再生する
       </label>
     </details>
   </div>
@@ -483,6 +580,7 @@ function getScale(diff){
 let currentMode = 'D';
 let currentTarget = [];
 let correct = 0, total = 0;
+let showTargetLines = false;  // Phase A-1: 判定後にtrue、出題時にfalse
 
 // ==================== ログ ====================
 function log(msg){
@@ -695,13 +793,16 @@ function drawViz(){
     const y = canvas.height - ((m-(baseMid-12))/24)*canvas.height;
     ctx2.beginPath(); ctx2.moveTo(0,y); ctx2.lineTo(canvas.width,y); ctx2.stroke();
   }
-  ctx2.strokeStyle = '#34c759';
-  ctx2.setLineDash([4,4]);
-  currentTarget.forEach(m => {
-    const y = canvas.height - ((m-(baseMid-12))/24)*canvas.height;
-    ctx2.beginPath(); ctx2.moveTo(0,y); ctx2.lineTo(canvas.width,y); ctx2.stroke();
-  });
-  ctx2.setLineDash([]);
+  // Phase A-1: 基準線（緑点線）は判定後のみ表示してヒントにならないように
+  if (showTargetLines) {
+    ctx2.strokeStyle = '#34c759';
+    ctx2.setLineDash([4,4]);
+    currentTarget.forEach(m => {
+      const y = canvas.height - ((m-(baseMid-12))/24)*canvas.height;
+      ctx2.beginPath(); ctx2.moveTo(0,y); ctx2.lineTo(canvas.width,y); ctx2.stroke();
+    });
+    ctx2.setLineDash([]);
+  }
   ctx2.strokeStyle = '#007aff';
   ctx2.lineWidth = 2;
   ctx2.beginPath();
@@ -828,6 +929,9 @@ function judge(){
     ? `<span class="result-correct">⭕ 正解！</span><div class="small">${detected}</div>`
     : `<span class="result-wrong">❌ ${detail}</span>
        <div class="small">あなた: ${detected || '―'}<br>正解: ${target}</div>`;
+  // Phase A-1: 判定が完了したので基準線を表示
+  showTargetLines = true;
+  drawViz();
 }
 
 // ==================== 出題（復唱・楽譜共通） ====================
@@ -856,7 +960,14 @@ function genQuestion(){
     currentMode === 'C' ? '上の音名を🎤 で鼻歌で歌ってください' :
                          '';
   recordPitches = [];
+  // Phase A-1: 新しい問題では基準線を隠す
+  showTargetLines = false;
   drawViz();
+  // Phase A-2: 復唱モードでは自動でお手本を1回再生（学習モードはユーザー操作に委ねる）
+  if (currentMode === 'R' && document.getElementById('autoPlayOnNext') &&
+      document.getElementById('autoPlayOnNext').checked) {
+    setTimeout(() => playMelody(currentTarget), 500);
+  }
 }
 
 // ==================== マイクテストモード ====================
@@ -1078,51 +1189,114 @@ function setUserKey(key){
   // コード当て(K)はキー設定の影響なし
 }
 
-// ==================== コード当てモード ====================
-// コードは度数（C4ベース）の相対値で定義
-const CHORD_DEFS_BEGINNER = [
-  {name:'C',  notes:[60, 64, 67]},   // ド・ミ・ソ
-  {name:'Dm', notes:[62, 65, 69]},   // レ・ファ・ラ
-  {name:'Em', notes:[64, 67, 71]},   // ミ・ソ・シ
-  {name:'F',  notes:[65, 69, 72]},   // ファ・ラ・ド
-  {name:'G',  notes:[67, 71, 74]},   // ソ・シ・レ
-  {name:'Am', notes:[69, 72, 76]},   // ラ・ド・ミ
+// ==================== コードモード ====================
+// コードタイプ定義（ルートからの半音オフセット）
+// 第3音、第5音、(第7音、テンション)
+const CHORD_TYPES = {
+  'maj':    {label:'Maj',     intervals:[0, 4, 7],          desc:'長三和音'},
+  'min':    {label:'min',     intervals:[0, 3, 7],          desc:'短三和音'},
+  'dim':    {label:'dim',     intervals:[0, 3, 6],          desc:'減三和音'},
+  'aug':    {label:'aug',     intervals:[0, 4, 8],          desc:'増三和音'},
+  'sus2':   {label:'sus2',    intervals:[0, 2, 7],          desc:'サスペンデッド2nd'},
+  'sus4':   {label:'sus4',    intervals:[0, 5, 7],          desc:'サスペンデッド4th'},
+  'maj7':   {label:'Maj7',    intervals:[0, 4, 7, 11],      desc:'メジャー7th'},
+  'min7':   {label:'m7',      intervals:[0, 3, 7, 10],      desc:'マイナー7th'},
+  '7':      {label:'7',       intervals:[0, 4, 7, 10],      desc:'ドミナント7th'},
+  'm7b5':   {label:'m7♭5',   intervals:[0, 3, 6, 10],      desc:'ハーフディミニッシュ'},
+  'dim7':   {label:'dim7',    intervals:[0, 3, 6, 9],       desc:'ディミニッシュ7th'},
+  'add9':   {label:'add9',    intervals:[0, 4, 7, 14],      desc:'add9'},
+};
+// ルート音名（C=0からB=11まで）
+const CHORD_ROOTS = [
+  {name:'C',  jp:'ド',    pc:0,  isSharp:false},
+  {name:'C#', jp:'ド#',   pc:1,  isSharp:true},
+  {name:'D',  jp:'レ',    pc:2,  isSharp:false},
+  {name:'D#', jp:'レ#',   pc:3,  isSharp:true},
+  {name:'E',  jp:'ミ',    pc:4,  isSharp:false},
+  {name:'F',  jp:'ファ',  pc:5,  isSharp:false},
+  {name:'F#', jp:'ファ#', pc:6,  isSharp:true},
+  {name:'G',  jp:'ソ',    pc:7,  isSharp:false},
+  {name:'G#', jp:'ソ#',   pc:8,  isSharp:true},
+  {name:'A',  jp:'ラ',    pc:9,  isSharp:false},
+  {name:'A#', jp:'ラ#',   pc:10, isSharp:true},
+  {name:'B',  jp:'シ',    pc:11, isSharp:false},
 ];
-// 鍵盤は C4(60) 〜 E5(76) を表示
+
+// 指定ルート（MIDI）とコードタイプから構成音を生成
+function buildChordNotes(rootMidi, typeKey){
+  const t = CHORD_TYPES[typeKey];
+  if (!t) return [];
+  return t.intervals.map(iv => rootMidi + iv);
+}
+// コード名生成
+function makeChordName(rootName, typeKey){
+  const t = CHORD_TYPES[typeKey];
+  return rootName + (typeKey === 'maj' ? '' : t.label);
+}
+
+// クイズ出題用：レベルごとのコードタイプとルート選択肢
+const QUIZ_LEVELS = {
+  beginner: {
+    // 入門：Cメジャーキーのダイアトニック三和音（7種）
+    types: ['maj', 'min', 'dim'],
+    roots: [
+      {root:0,  type:'maj'},   // C
+      {root:2,  type:'min'},   // Dm
+      {root:4,  type:'min'},   // Em
+      {root:5,  type:'maj'},   // F
+      {root:7,  type:'maj'},   // G
+      {root:9,  type:'min'},   // Am
+      {root:11, type:'dim'},   // Bdim
+    ]
+  },
+  seventh: {
+    // 基礎：ダイアトニック7thコード + 三和音も含む
+    types: ['maj', 'min', 'maj7', 'min7', '7', 'm7b5'],
+    roots: [
+      {root:0,  type:'maj'},  {root:0,  type:'maj7'},  // C, CMaj7
+      {root:2,  type:'min'},  {root:2,  type:'min7'},  // Dm, Dm7
+      {root:4,  type:'min'},  {root:4,  type:'min7'},  // Em, Em7
+      {root:5,  type:'maj'},  {root:5,  type:'maj7'},  // F, FMaj7
+      {root:7,  type:'maj'},  {root:7,  type:'7'},     // G, G7
+      {root:9,  type:'min'},  {root:9,  type:'min7'},  // Am, Am7
+      {root:11, type:'m7b5'},                          // Bm7♭5
+    ]
+  },
+  extended: {
+    // 応用：sus4、add9、dim、aug、ディミニッシュ等を含む
+    types: ['maj','min','dim','aug','sus2','sus4','maj7','min7','7','m7b5','dim7','add9'],
+    // ランダム生成（ルートはC,F,Gなど主要キー中心）
+    roots: null  // ランダム
+  }
+};
+
+// 鍵盤は C4(60) 〜 B5(83) の2オクターブを表示
 const PIANO_MIN_MIDI = 60;
-const PIANO_MAX_MIDI = 76;
+const PIANO_MAX_MIDI = 83;
 let currentChord = null;       // {name, notes:[..]}
 let chordSelected = new Set(); // 選択済みMIDI
 let chordCorrect = 0, chordTotal = 0;
 let chordResultShown = false;
 
-function buildPiano(){
-  const whiteRow = document.getElementById('pianoWhiteRow');
-  const blackRow = document.getElementById('pianoBlackRow');
-  whiteRow.innerHTML = '';
-  blackRow.innerHTML = '';
-  // 白鍵: C4(60), D4(62), E4(64), F4(65), G4(67), A4(69), B4(71),
-  //       C5(72), D5(74), E5(76)  → 10音
-  // ※ 14列gridだが10鍵のみ。残り4列はスペーサー → 11音用に変更し、シ#=ド扱い
-  // 簡易化: C4〜E5 の白鍵だけ表示 = 10鍵
+// 汎用鍵盤ビルダー：指定の whiteRow/blackRow に C4-B5 の鍵盤を生成
+function buildPianoIn(whiteRowEl, blackRowEl, onClickFn){
+  whiteRowEl.innerHTML = '';
+  blackRowEl.innerHTML = '';
   const whites = [];
   for (let m=PIANO_MIN_MIDI; m<=PIANO_MAX_MIDI; m++){
     const pc = ((m%12)+12)%12;
     if ([0,2,4,5,7,9,11].includes(pc)) whites.push(m);
   }
-  // grid-template-columns を白鍵数に合わせる
-  whiteRow.style.gridTemplateColumns = `repeat(${whites.length}, 1fr)`;
+  whiteRowEl.style.gridTemplateColumns = `repeat(${whites.length}, 1fr)`;
   whites.forEach(m => {
     const b = document.createElement('button');
     b.className = 'pk-white';
     b.dataset.midi = m;
     const oct = Math.floor(m/12) - 1;
-    b.innerHTML = `<span>${midiToName(m)}</span><span style="font-size:9px;color:#888">${oct}</span>`;
-    b.onclick = () => onPianoKeyClick(m, b);
-    whiteRow.appendChild(b);
+    b.innerHTML = `<span>${midiToName(m)}</span><span style="font-size:8px;color:#888">${oct}</span>`;
+    b.onclick = () => onClickFn(m, b);
+    whiteRowEl.appendChild(b);
   });
-  // 黒鍵：C4-E5の範囲。黒鍵の位置（白鍵に対する%）を計算
-  // 白鍵幅 = 100/whites.length %
   const wWidth = 100 / whites.length;
   const blacks = [];
   for (let m=PIANO_MIN_MIDI; m<=PIANO_MAX_MIDI; m++){
@@ -1130,19 +1304,113 @@ function buildPiano(){
     if ([1,3,6,8,10].includes(pc)) blacks.push(m);
   }
   blacks.forEach(m => {
-    // この黒鍵の左隣の白鍵を探す
     const leftWhite = m - 1;
     const idx = whites.indexOf(leftWhite);
     if (idx < 0) return;
-    const left = (idx + 1) * wWidth - 2.75; // 中央寄せ
+    const left = (idx + 1) * wWidth - 2.25;
     const b = document.createElement('button');
     b.className = 'pk-black';
     b.dataset.midi = m;
     b.style.left = left + '%';
     b.title = midiToName(m, false);
-    b.onclick = (e) => { e.stopPropagation(); onPianoKeyClick(m, b); };
-    blackRow.appendChild(b);
+    b.onclick = (e) => { e.stopPropagation(); onClickFn(m, b); };
+    blackRowEl.appendChild(b);
   });
+}
+// 後方互換：buildPiano()はクイズ用鍵盤を生成
+function buildPiano(){
+  buildPianoIn(
+    document.getElementById('pianoWhiteRow'),
+    document.getElementById('pianoBlackRow'),
+    onPianoKeyClick
+  );
+}
+
+// ==================== コード探索モード ====================
+let exploreRoot = 0;       // 0-11
+let exploreType = 'maj';
+function buildExploreSelectors(){
+  // ルートボタン12個
+  const rootSel = document.getElementById('exploreRootSel');
+  rootSel.innerHTML = '';
+  CHORD_ROOTS.forEach((r, i) => {
+    const b = document.createElement('button');
+    b.className = 'chord-root-btn' + (r.isSharp ? ' sharp' : '');
+    b.textContent = r.name;
+    b.dataset.pc = i;
+    b.onclick = () => setExploreRoot(i);
+    rootSel.appendChild(b);
+  });
+  // タイプボタン
+  const typeSel = document.getElementById('exploreTypeSel');
+  typeSel.innerHTML = '';
+  Object.keys(CHORD_TYPES).forEach(key => {
+    const t = CHORD_TYPES[key];
+    const b = document.createElement('button');
+    b.className = 'chord-type-btn';
+    b.textContent = t.label;
+    b.title = t.desc;
+    b.dataset.type = key;
+    b.onclick = () => setExploreType(key);
+    typeSel.appendChild(b);
+  });
+}
+function setExploreRoot(pc){
+  exploreRoot = pc;
+  document.querySelectorAll('#exploreRootSel .chord-root-btn').forEach((b, i) => {
+    b.classList.toggle('active', i === pc);
+  });
+  refreshExploreChord(true);
+}
+function setExploreType(key){
+  exploreType = key;
+  document.querySelectorAll('#exploreTypeSel .chord-type-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.type === key);
+  });
+  refreshExploreChord(true);
+}
+function refreshExploreChord(autoPlay){
+  const rootMidi = 60 + exploreRoot;
+  const rootName = CHORD_ROOTS[exploreRoot].name;
+  const notes = buildChordNotes(rootMidi, exploreType);
+  const chordName = makeChordName(rootName, exploreType);
+  // 表示更新
+  document.getElementById('exploreName').textContent = chordName;
+  const noteNames = notes.map(m => midiToName(m)).join('・');
+  const typeDesc = CHORD_TYPES[exploreType].desc;
+  document.getElementById('exploreNotes').textContent = `${noteNames}（${typeDesc}）`;
+  // 鍵盤のハイライト
+  const whiteRow = document.getElementById('explorePianoWhiteRow');
+  const blackRow = document.getElementById('explorePianoBlackRow');
+  if (!whiteRow.firstChild) {
+    // 初回構築
+    buildPianoIn(whiteRow, blackRow, (midi, btnEl) => {
+      // 探索鍵盤クリックは単音試聴のみ
+      playNote(midi, 0.5, 0, 0.18);
+    });
+  }
+  // ハイライトクリア
+  document.querySelectorAll('#explorePianoWhiteRow .pk-white, #explorePianoBlackRow .pk-black').forEach(b => {
+    b.classList.remove('explore-highlight','explore-root');
+  });
+  // 構成音をハイライト（ルートは特別色）
+  const noteSet = new Set(notes);
+  notes.forEach(m => {
+    const isWhite = [0,2,4,5,7,9,11].includes(((m%12)+12)%12);
+    const sel = isWhite ? '#explorePianoWhiteRow .pk-white' : '#explorePianoBlackRow .pk-black';
+    document.querySelectorAll(sel).forEach(b => {
+      if (parseInt(b.dataset.midi) === m){
+        if (m === rootMidi) b.classList.add('explore-root');
+        else b.classList.add('explore-highlight');
+      }
+    });
+  });
+  if (autoPlay) playChord(notes, false);
+}
+function playExplore(arpeggio){
+  const rootMidi = 60 + exploreRoot;
+  const notes = buildChordNotes(rootMidi, exploreType);
+  playChord(notes, arpeggio);
 }
 function onPianoKeyClick(midi, btnEl){
   // クリック時に音を鳴らす
@@ -1169,12 +1437,26 @@ function updateChordStatus(){
 }
 function genChordQuestion(){
   const level = document.getElementById('chordLevel').value;
-  const pool = CHORD_DEFS_BEGINNER; // 将来 basic 対応
-  currentChord = pool[Math.floor(Math.random()*pool.length)];
+  const def = QUIZ_LEVELS[level] || QUIZ_LEVELS.beginner;
+  let rootPc, typeKey;
+  if (def.roots){
+    // 固定リストからランダム
+    const pick = def.roots[Math.floor(Math.random() * def.roots.length)];
+    rootPc = pick.root; typeKey = pick.type;
+  } else {
+    // 応用：任意のルート(0-11) + タイプリストからランダム
+    rootPc = Math.floor(Math.random()*12);
+    typeKey = def.types[Math.floor(Math.random()*def.types.length)];
+  }
+  // ルートMIDIをC4オクターブに配置（一番低いボイシング）
+  const rootMidi = 60 + rootPc;
+  const rootName = CHORD_ROOTS[rootPc].name;
+  const notes = buildChordNotes(rootMidi, typeKey);
+  currentChord = { name: makeChordName(rootName, typeKey), notes };
   chordSelected.clear();
   chordResultShown = false;
   // 鍵盤の表示状態リセット
-  document.querySelectorAll('.pk-white, .pk-black').forEach(b => {
+  document.querySelectorAll('#pianoWhiteRow .pk-white, #pianoBlackRow .pk-black').forEach(b => {
     b.classList.remove('selected','correct','wrong','target');
   });
   document.getElementById('chordResult').textContent = '';
@@ -1187,7 +1469,13 @@ function genChordQuestion(){
     nameEl.textContent = '？';
     nameEl.classList.add('hidden-q');
   }
-  document.getElementById('chordStatus').textContent = 'お手本▶ を押してコードを聴いてください';
+  const need = currentChord.notes.length;
+  document.getElementById('chordStatus').textContent = `お手本▶ を押してコードを聴いてください（${need}音）`;
+  // Phase A-2: 自動再生
+  const autoPlay = document.getElementById('chordAutoPlay');
+  if (autoPlay && autoPlay.checked) {
+    setTimeout(() => playCurrentChord(), 500);
+  }
 }
 function playCurrentChord(){
   if (!currentChord) return;
@@ -1205,8 +1493,8 @@ function checkChord(){
   }
   if (ok) chordCorrect++;
   document.getElementById('chordScore').textContent = `スコア: ${chordCorrect} / ${chordTotal}`;
-  // 鍵盤の判定表示
-  document.querySelectorAll('.pk-white, .pk-black').forEach(b => {
+  // 鍵盤の判定表示（クイズ用鍵盤のみ）
+  document.querySelectorAll('#pianoWhiteRow .pk-white, #pianoBlackRow .pk-black').forEach(b => {
     const m = parseInt(b.dataset.midi);
     const isTarget = target.has(m);
     const isSel = sel.has(m);
@@ -1229,7 +1517,7 @@ function checkChord(){
 function clearChordSelection(){
   if (chordResultShown) return;
   chordSelected.clear();
-  document.querySelectorAll('.pk-white, .pk-black').forEach(b => {
+  document.querySelectorAll('#pianoWhiteRow .pk-white, #pianoBlackRow .pk-black').forEach(b => {
     b.classList.remove('selected');
   });
   updateChordStatus();
@@ -1260,12 +1548,36 @@ function switchMode(m){
   } else if (m === 'K'){
     document.getElementById('chordView').classList.remove('hidden');
     currentMode = 'K';
-    genChordQuestion();
+    // デフォルトで探索サブタブを表示
+    switchChordSubTab('explore');
   } else {
     // R or C
     document.getElementById('trainView').classList.remove('hidden');
     currentMode = m;
     genQuestion();
+  }
+}
+
+// ==================== サブタブ切替 ====================
+function switchChordSubTab(which){
+  const exploreView = document.getElementById('chordExploreView');
+  const quizView    = document.getElementById('chordQuizView');
+  const btnExplore  = document.getElementById('subExplore');
+  const btnQuiz     = document.getElementById('subQuiz');
+  if (which === 'explore'){
+    exploreView.classList.remove('hidden');
+    quizView.classList.add('hidden');
+    btnExplore.classList.add('active');
+    btnQuiz.classList.remove('active');
+    // 初回ならコード探索を初期化
+    refreshExploreChord(false);
+  } else {
+    exploreView.classList.add('hidden');
+    quizView.classList.remove('hidden');
+    btnExplore.classList.remove('active');
+    btnQuiz.classList.add('active');
+    // クイズ開始時に新しい問題を生成（自動再生もここで起動）
+    genChordQuestion();
   }
 }
 
@@ -1341,7 +1653,18 @@ document.getElementById('chordShowName').onchange = () => {
   }
 };
 
+// サブタブクリック
+document.getElementById('subExplore').onclick = () => switchChordSubTab('explore');
+document.getElementById('subQuiz').onclick    = () => switchChordSubTab('quiz');
+// コード探索ボタン
+document.getElementById('explorePlay').onclick = () => playExplore(false);
+document.getElementById('exploreArp').onclick  = () => playExplore(true);
+
 // ==================== 初期化 ====================
+// コード探索のセレクタ・鍵盤を初期化
+buildExploreSelectors();
+setExploreRoot(0);
+setExploreType('maj');
 // バッジ初期表示
 document.getElementById('keyBadge').textContent = KEY_BADGE_LABELS[userKey];
 // キーセグメントボタンの初期active同期
