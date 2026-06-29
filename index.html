@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>🎵 音感トレーニング v3.2</title>
+<title>🎵 音感トレーニング v3.3</title>
 <style>
   :root { --primary:#007aff; --ok:#34c759; --ng:#ff3b30; --warn:#ff9500; --bg:#f5f5f7; }
   * { box-sizing: border-box; }
@@ -258,6 +258,64 @@
     border: none; cursor: pointer;
   }
   .chord-type-btn.active { background: var(--primary); color: white; }
+  /* クイズタイプセレクタ */
+  .quiz-type-selector {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    margin: 4px 0 10px;
+  }
+  .quiz-type-btn {
+    min-width: 0; padding: 10px 2px;
+    font-size: 12px; font-weight: bold;
+    background: #e5e5ea; color: #1c1c1e;
+    border-radius: 8px; margin: 0;
+    border: none; cursor: pointer;
+  }
+  .quiz-type-btn.active { background: var(--primary); color: white; }
+  /* Maj/min 回答ボタン */
+  .majmin-answer-area {
+    margin: 14px 0 8px;
+  }
+  .majmin-answer-btns {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .majmin-btn {
+    font-size: 18px;
+    font-weight: bold;
+    padding: 28px 8px;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    margin: 0;
+    min-width: 0;
+    color: white;
+    transition: opacity 0.15s;
+  }
+  .majmin-btn.major {
+    background: linear-gradient(135deg, #ff9500 0%, #ff6f00 100%);
+  }
+  .majmin-btn.minor {
+    background: linear-gradient(135deg, #5856d6 0%, #3634a3 100%);
+  }
+  .majmin-btn:active { opacity: 0.7; }
+  .majmin-btn.correct {
+    box-shadow: 0 0 0 4px var(--ok);
+  }
+  .majmin-btn.wrong {
+    box-shadow: 0 0 0 4px var(--ng);
+    opacity: 0.5;
+  }
+  /* ベース音当て：鍵盤の選択色（単音用） */
+  .pk-white.bass-selected {
+    background: linear-gradient(180deg, #fff 50%, #007aff 100%);
+    color: #fff;
+  }
+  .pk-black.bass-selected {
+    background: linear-gradient(180deg, #444 50%, #007aff 100%);
+  }
 </style>
 <!-- ===== PWA 対応 ===== -->
 <link rel="manifest" href="manifest.json">
@@ -271,7 +329,7 @@
 <meta name="robots" content="noindex, nofollow">
 </head>
 <body>
-<h1>🎵 音感トレーニング v3.2 <span class="global-key-badge" id="keyBadge">♀ 女性</span></h1>
+<h1>🎵 音感トレーニング v3.3 <span class="global-key-badge" id="keyBadge">♀ 女性</span></h1>
 
 <div class="card mode-tabs">
   <button id="modeD" class="active">🎯 チューニング</button>
@@ -454,15 +512,29 @@
   <!-- ===== サブタブ 2: コード当て ===== -->
   <div id="chordQuizView" class="card hidden">
     <h3 style="margin-top:0">🎯 コード当て</h3>
-    <div class="small" style="margin-bottom:8px">
-      鳴っているコードを聴いて、構成音を鍵盤で全てタップしてください。鍵盤は1音ずつタップで試聴・選択できます。
+    <!-- クイズタイプセレクタ -->
+    <label class="small" style="display:block;margin-top:4px">クイズタイプ:</label>
+    <div class="quiz-type-selector" id="quizTypeSel">
+      <button class="quiz-type-btn active" data-qtype="notes">🎹 構成音</button>
+      <button class="quiz-type-btn" data-qtype="majmin">♬ Maj/min</button>
+      <button class="quiz-type-btn" data-qtype="bass">🎸 ベース音</button>
+    </div>
+    <div class="small" style="margin-bottom:8px" id="quizInstruction">
+      鳴っているコードの構成音を、鍵盤で全てタップしてください。
       <br>※ 聴音力の純粋測定のため、キー設定の影響を受けません（C4中心固定）。
     </div>
     <div class="chord-display">
       <div class="chord-target-name hidden-q" id="chordTargetName">？</div>
       <div class="chord-selection-status" id="chordStatus">お手本▶ を押してコードを聴いてください</div>
     </div>
-    <!-- ピアノ鍵盤（クイズ用） -->
+    <!-- Maj/min回答エリア（Maj/minモード時のみ表示） -->
+    <div id="majminAnswerArea" class="majmin-answer-area hidden">
+      <div class="majmin-answer-btns">
+        <button class="majmin-btn major" data-ans="major">😊 Major</button>
+        <button class="majmin-btn minor" data-ans="minor">😢 minor</button>
+      </div>
+    </div>
+    <!-- ピアノ鍵盤（クイズ用）：Maj/min以外で表示 -->
     <div class="piano-wrap" id="pianoWrap">
       <div class="piano-white-row" id="pianoWhiteRow"></div>
       <div class="piano-black-row" id="pianoBlackRow"></div>
@@ -477,12 +549,15 @@
     <div class="score" id="chordScore">スコア: 0 / 0</div>
     <details style="margin-top:10px">
       <summary>⚙️ コード当て設定</summary>
-      <label>出題範囲:
+      <label>出題範囲（構成音モード）:
         <select id="chordLevel">
           <option value="beginner" selected>入門（ダイアトニック三和音 7種）</option>
           <option value="seventh">基礎（+ 7thコード）</option>
           <option value="extended">応用（sus4 / add9 / dim / aug 含む）</option>
         </select>
+      </label>
+      <label>
+        <input type="checkbox" id="majminInclude7th"> Maj/minモードで 7thコードも含める（Maj7/m7/7）
       </label>
       <label>
         <input type="checkbox" id="chordShowName"> 出題時にコード名を表示する（学習モード）
@@ -1274,9 +1349,23 @@ const QUIZ_LEVELS = {
 const PIANO_MIN_MIDI = 60;
 const PIANO_MAX_MIDI = 83;
 let currentChord = null;       // {name, notes:[..]}
-let chordSelected = new Set(); // 選択済みMIDI
+let chordSelected = new Set(); // 選択済みMIDI（構成音モード用）
 let chordCorrect = 0, chordTotal = 0;
 let chordResultShown = false;
+// 新規：クイズタイプ管理
+let quizType = 'notes';        // 'notes' | 'majmin' | 'bass'
+let bassSelected = null;       // ベース音モード用：単音選択
+let majminAnswer = null;       // Maj/minモード用：選択した回答 ('major'|'minor')
+// Maj/min判定用コードタイプ
+const MAJ_TYPES_BASIC = ['maj', 'min'];
+const MAJ_TYPES_7TH   = ['maj', 'min', 'maj7', 'min7', '7'];
+function getMajminPool(){
+  return document.getElementById('majminInclude7th').checked ? MAJ_TYPES_7TH : MAJ_TYPES_BASIC;
+}
+function isMajorChord(typeKey){
+  // メジャー系：第3音が長3度（4半音）
+  return CHORD_TYPES[typeKey].intervals.includes(4);
+}
 
 // 汎用鍵盤ビルダー：指定の whiteRow/blackRow に C4-B5 の鍵盤を生成
 function buildPianoIn(whiteRowEl, blackRowEl, onClickFn){
@@ -1415,18 +1504,28 @@ function playExplore(arpeggio){
 function onPianoKeyClick(midi, btnEl){
   // クリック時に音を鳴らす
   playNote(midi, 0.5, 0, 0.18);
-  if (chordResultShown){
-    // 判定後は次の問題に進むまで選択不可
-    return;
+  if (chordResultShown) return;
+  if (quizType === 'bass'){
+    // ベース音モード：単音選択（既存選択をクリア）
+    document.querySelectorAll('#pianoWhiteRow .pk-white, #pianoBlackRow .pk-black').forEach(b => {
+      b.classList.remove('bass-selected');
+    });
+    bassSelected = midi;
+    btnEl.classList.add('bass-selected');
+    document.getElementById('chordStatus').textContent =
+      `選択中: ${midiToName(midi)}（判定 ✅ ボタンで答え合わせ）`;
+  } else if (quizType === 'notes'){
+    // 構成音モード：複数選択トグル
+    if (chordSelected.has(midi)){
+      chordSelected.delete(midi);
+      btnEl.classList.remove('selected');
+    } else {
+      chordSelected.add(midi);
+      btnEl.classList.add('selected');
+    }
+    updateChordStatus();
   }
-  if (chordSelected.has(midi)){
-    chordSelected.delete(midi);
-    btnEl.classList.remove('selected');
-  } else {
-    chordSelected.add(midi);
-    btnEl.classList.add('selected');
-  }
-  updateChordStatus();
+  // Maj/minモードでは鍵盤クリックは試聴のみ（鍵盤は非表示なので呼ばれない想定）
 }
 function updateChordStatus(){
   const need = currentChord ? currentChord.notes.length : 3;
@@ -1436,28 +1535,40 @@ function updateChordStatus(){
     `選択中: ${got}/${need}音` + (arr ? `（${arr}）` : '');
 }
 function genChordQuestion(){
-  const level = document.getElementById('chordLevel').value;
-  const def = QUIZ_LEVELS[level] || QUIZ_LEVELS.beginner;
   let rootPc, typeKey;
-  if (def.roots){
-    // 固定リストからランダム
-    const pick = def.roots[Math.floor(Math.random() * def.roots.length)];
-    rootPc = pick.root; typeKey = pick.type;
-  } else {
-    // 応用：任意のルート(0-11) + タイプリストからランダム
+  if (quizType === 'majmin'){
+    // メジャー/マイナー判定モード：12ルート全てから出題、タイプはmaj/min系
+    const pool = getMajminPool();
     rootPc = Math.floor(Math.random()*12);
-    typeKey = def.types[Math.floor(Math.random()*def.types.length)];
+    typeKey = pool[Math.floor(Math.random()*pool.length)];
+  } else {
+    // 構成音 or ベース音：既存の出題範囲設定を流用
+    const level = document.getElementById('chordLevel').value;
+    const def = QUIZ_LEVELS[level] || QUIZ_LEVELS.beginner;
+    if (def.roots){
+      const pick = def.roots[Math.floor(Math.random() * def.roots.length)];
+      rootPc = pick.root; typeKey = pick.type;
+    } else {
+      rootPc = Math.floor(Math.random()*12);
+      typeKey = def.types[Math.floor(Math.random()*def.types.length)];
+    }
   }
   // ルートMIDIをC4オクターブに配置（一番低いボイシング）
   const rootMidi = 60 + rootPc;
   const rootName = CHORD_ROOTS[rootPc].name;
   const notes = buildChordNotes(rootMidi, typeKey);
-  currentChord = { name: makeChordName(rootName, typeKey), notes };
+  currentChord = { name: makeChordName(rootName, typeKey), notes, typeKey, rootMidi };
   chordSelected.clear();
+  bassSelected = null;
+  majminAnswer = null;
   chordResultShown = false;
-  // 鍵盤の表示状態リセット
+  // 鍵盤の表示状態リセット（全クラスクリア）
   document.querySelectorAll('#pianoWhiteRow .pk-white, #pianoBlackRow .pk-black').forEach(b => {
-    b.classList.remove('selected','correct','wrong','target');
+    b.classList.remove('selected','correct','wrong','target','bass-selected');
+  });
+  // Maj/minボタンの状態リセット
+  document.querySelectorAll('.majmin-btn').forEach(b => {
+    b.classList.remove('correct','wrong');
   });
   document.getElementById('chordResult').textContent = '';
   // コード名表示
@@ -1469,9 +1580,17 @@ function genChordQuestion(){
     nameEl.textContent = '？';
     nameEl.classList.add('hidden-q');
   }
-  const need = currentChord.notes.length;
-  document.getElementById('chordStatus').textContent = `お手本▶ を押してコードを聴いてください（${need}音）`;
-  // Phase A-2: 自動再生
+  // ステータスメッセージをクイズタイプ別に
+  let statusMsg;
+  if (quizType === 'notes'){
+    statusMsg = `お手本▶ を押してコードを聴いてください（${currentChord.notes.length}音）`;
+  } else if (quizType === 'majmin'){
+    statusMsg = 'お手本▶ を押して、Major か minor か判定してください';
+  } else {
+    statusMsg = 'お手本▶ を押して、ベース音を鍵盤で1音タップして答えてください';
+  }
+  document.getElementById('chordStatus').textContent = statusMsg;
+  // 自動再生
   const autoPlay = document.getElementById('chordAutoPlay');
   if (autoPlay && autoPlay.checked) {
     setTimeout(() => playCurrentChord(), 500);
@@ -1484,6 +1603,16 @@ function playCurrentChord(){
 }
 function checkChord(){
   if (!currentChord || chordResultShown) return;
+  if (quizType === 'notes'){
+    checkNotesAnswer();
+  } else if (quizType === 'bass'){
+    checkBassAnswer();
+  }
+  // Maj/minは回答ボタンで即判定するためここでは何もしない
+}
+
+// 構成音モードの判定（既存ロジック）
+function checkNotesAnswer(){
   chordTotal++;
   const target = new Set(currentChord.notes);
   const sel = chordSelected;
@@ -1492,8 +1621,8 @@ function checkChord(){
     for (const m of target){ if (!sel.has(m)) { ok = false; break; } }
   }
   if (ok) chordCorrect++;
-  document.getElementById('chordScore').textContent = `スコア: ${chordCorrect} / ${chordTotal}`;
-  // 鍵盤の判定表示（クイズ用鍵盤のみ）
+  updateScoreDisplay();
+  // 鍵盤の判定表示
   document.querySelectorAll('#pianoWhiteRow .pk-white, #pianoBlackRow .pk-black').forEach(b => {
     const m = parseInt(b.dataset.midi);
     const isTarget = target.has(m);
@@ -1506,21 +1635,96 @@ function checkChord(){
       b.classList.remove('selected'); b.classList.add('wrong');
     }
   });
+  revealAndFinishResult(ok,
+    `${currentChord.name}（${currentChord.notes.map(m=>midiToName(m)).join('・')}）`
+  );
+}
+
+// ベース音モードの判定
+function checkBassAnswer(){
+  if (bassSelected === null){
+    document.getElementById('chordStatus').textContent = '鍵盤で1音タップしてください';
+    return;
+  }
+  chordTotal++;
+  // 正解：コードの最低音（=ルート音、ルートポジションのみ）
+  const correctBass = Math.min(...currentChord.notes);
+  // 判定：音名（ピッチクラス）で比較（オクターブ違いもOKとするか？）
+  // 純粋にベース音を答えてもらうので、MIDI完全一致 or 同名のオクターブ違いも許容
+  const correctPc = ((correctBass % 12) + 12) % 12;
+  const selPc = ((bassSelected % 12) + 12) % 12;
+  const ok = (selPc === correctPc);
+  if (ok) chordCorrect++;
+  updateScoreDisplay();
+  // 鍵盤に正解・不正解を表示
+  document.querySelectorAll('#pianoWhiteRow .pk-white, #pianoBlackRow .pk-black').forEach(b => {
+    const m = parseInt(b.dataset.midi);
+    const isCorrectBass = (m === correctBass);
+    const isSelected = (m === bassSelected);
+    b.classList.remove('bass-selected');
+    if (isCorrectBass && isSelected){
+      b.classList.add('correct');
+    } else if (isCorrectBass){
+      b.classList.add('target');
+    } else if (isSelected){
+      b.classList.add('wrong');
+    }
+  });
+  revealAndFinishResult(ok,
+    `${currentChord.name} のベース音は <b>${midiToName(correctBass)}</b>`
+  );
+}
+
+// Maj/minモードの判定（ボタンクリックで呼ばれる）
+function checkMajminAnswer(ans){
+  if (!currentChord || chordResultShown) return;
+  if (quizType !== 'majmin') return;
+  chordTotal++;
+  const isCorrectMajor = isMajorChord(currentChord.typeKey);
+  const userSaidMajor = (ans === 'major');
+  const ok = (isCorrectMajor === userSaidMajor);
+  if (ok) chordCorrect++;
+  updateScoreDisplay();
+  // ボタンの正解・不正解表示
+  document.querySelectorAll('.majmin-btn').forEach(b => {
+    const isThisAnsMajor = (b.dataset.ans === 'major');
+    const isCorrectBtn = (isThisAnsMajor === isCorrectMajor);
+    if (isCorrectBtn) b.classList.add('correct');
+    else if (b.dataset.ans === ans) b.classList.add('wrong');
+  });
+  revealAndFinishResult(ok,
+    `${currentChord.name} は <b>${isCorrectMajor ? 'Major' : 'minor'}</b>`
+  );
+}
+
+function updateScoreDisplay(){
+  document.getElementById('chordScore').textContent = `スコア: ${chordCorrect} / ${chordTotal}`;
+}
+
+function revealAndFinishResult(ok, detail){
   // コード名を必ず表示
   document.getElementById('chordTargetName').textContent = currentChord.name;
   document.getElementById('chordTargetName').classList.remove('hidden-q');
   document.getElementById('chordResult').innerHTML = ok
-    ? `<span class="result-correct">⭕ 正解！ ${currentChord.name}（${currentChord.notes.map(m=>midiToName(m)).join('・')}）</span>`
-    : `<span class="result-wrong">❌ 残念…正解は ${currentChord.name}（${currentChord.notes.map(m=>midiToName(m)).join('・')}）</span>`;
+    ? `<span class="result-correct">⭕ 正解！ ${detail}</span>`
+    : `<span class="result-wrong">❌ 残念… ${detail}</span>`;
   chordResultShown = true;
 }
 function clearChordSelection(){
   if (chordResultShown) return;
-  chordSelected.clear();
-  document.querySelectorAll('#pianoWhiteRow .pk-white, #pianoBlackRow .pk-black').forEach(b => {
-    b.classList.remove('selected');
-  });
-  updateChordStatus();
+  if (quizType === 'notes'){
+    chordSelected.clear();
+    document.querySelectorAll('#pianoWhiteRow .pk-white, #pianoBlackRow .pk-black').forEach(b => {
+      b.classList.remove('selected');
+    });
+    updateChordStatus();
+  } else if (quizType === 'bass'){
+    bassSelected = null;
+    document.querySelectorAll('#pianoWhiteRow .pk-white, #pianoBlackRow .pk-black').forEach(b => {
+      b.classList.remove('bass-selected');
+    });
+    document.getElementById('chordStatus').textContent = 'お手本▶ を押して、ベース音を鍵盤で1音タップして答えてください';
+  }
 }
 
 // ==================== モード切替 ====================
@@ -1556,6 +1760,43 @@ function switchMode(m){
     currentMode = m;
     genQuestion();
   }
+}
+
+// ==================== クイズタイプ切替 ====================
+function setQuizType(type){
+  if (!['notes','majmin','bass'].includes(type)) return;
+  quizType = type;
+  // ボタンのアクティブ表示
+  document.querySelectorAll('.quiz-type-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.qtype === type);
+  });
+  // 説明文の切替
+  const instr = document.getElementById('quizInstruction');
+  if (type === 'notes'){
+    instr.innerHTML = '鳴っているコードの構成音を、鍵盤で全てタップしてください。<br>※ キー設定の影響を受けません（C4中心固定）。';
+  } else if (type === 'majmin'){
+    instr.innerHTML = '鳴っているコードが <b>メジャー</b> か <b>マイナー</b> かを判定してください。';
+  } else {
+    instr.innerHTML = '鳴っているコードの <b>ベース音（最低音）</b> を鍵盤で1音タップして答えてください。';
+  }
+  // UI表示切替
+  const pianoWrap   = document.getElementById('pianoWrap');
+  const majminArea  = document.getElementById('majminAnswerArea');
+  const checkBtn    = document.getElementById('chordCheck');
+  const clearBtn    = document.getElementById('chordClear');
+  if (type === 'majmin'){
+    pianoWrap.classList.add('hidden');
+    majminArea.classList.remove('hidden');
+    checkBtn.classList.add('hidden');  // ボタンクリックが即判定
+    clearBtn.classList.add('hidden');
+  } else {
+    pianoWrap.classList.remove('hidden');
+    majminArea.classList.add('hidden');
+    checkBtn.classList.remove('hidden');
+    clearBtn.classList.remove('hidden');
+  }
+  // 新しい問題を生成
+  genChordQuestion();
 }
 
 // ==================== サブタブ切替 ====================
@@ -1656,6 +1897,18 @@ document.getElementById('chordShowName').onchange = () => {
 // サブタブクリック
 document.getElementById('subExplore').onclick = () => switchChordSubTab('explore');
 document.getElementById('subQuiz').onclick    = () => switchChordSubTab('quiz');
+// クイズタイプ切替
+document.querySelectorAll('.quiz-type-btn').forEach(b => {
+  b.onclick = () => setQuizType(b.dataset.qtype);
+});
+// Maj/min回答ボタン
+document.querySelectorAll('.majmin-btn').forEach(b => {
+  b.onclick = () => checkMajminAnswer(b.dataset.ans);
+});
+// Maj/min 7th含むオプション切替時、現在の問題を再生成（影響あるため）
+document.getElementById('majminInclude7th').onchange = () => {
+  if (quizType === 'majmin') genChordQuestion();
+};
 // コード探索ボタン
 document.getElementById('explorePlay').onclick = () => playExplore(false);
 document.getElementById('exploreArp').onclick  = () => playExplore(true);
